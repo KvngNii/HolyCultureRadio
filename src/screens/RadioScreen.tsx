@@ -12,10 +12,14 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
+  Linking,
+  Alert,
 } from 'react-native';
 import { colors, typography, spacing, shadows } from '../theme';
 import { usePlayer } from '../hooks/usePlayer';
 import { Show, ShowSchedule } from '../types';
+import SiriusXMPlayer from '../components/SiriusXMPlayer';
+import { siriusxmService } from '../services/siriusxm';
 
 const { width } = Dimensions.get('window');
 
@@ -60,6 +64,38 @@ export default function RadioScreen() {
   const { playerState, playRadio, togglePlayPause, stop } = usePlayer();
   const [isLive, setIsLive] = useState(true);
   const [pulseAnim] = useState(new Animated.Value(1));
+  const [showSiriusXMPlayer, setShowSiriusXMPlayer] = useState(false);
+
+  // Open SiriusXM app or show web player
+  const openSiriusXM = () => {
+    Alert.alert(
+      'Listen on SiriusXM',
+      'Choose how you want to listen to Holy Culture Radio:',
+      [
+        {
+          text: 'Open SiriusXM App',
+          onPress: () => {
+            // Try to open SiriusXM app, fall back to App Store
+            Linking.canOpenURL('siriusxm://').then((supported) => {
+              if (supported) {
+                Linking.openURL('siriusxm://channel/154');
+              } else {
+                Linking.openURL('https://apps.apple.com/app/siriusxm/id317951436');
+              }
+            });
+          },
+        },
+        {
+          text: 'Web Player',
+          onPress: () => setShowSiriusXMPlayer(true),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
 
   // Pulse animation for live indicator
   useEffect(() => {
@@ -84,11 +120,8 @@ export default function RadioScreen() {
   }, [isLive, playerState.isPlaying, playerState.source]);
 
   const handlePlayPress = () => {
-    if (playerState.source === 'radio' && playerState.isPlaying) {
-      togglePlayPause();
-    } else {
-      playRadio();
-    }
+    // Open SiriusXM to stream - requires subscription
+    openSiriusXM();
   };
 
   const isPlaying = playerState.source === 'radio' && playerState.isPlaying;
@@ -230,12 +263,18 @@ export default function RadioScreen() {
           To listen to Holy Culture Radio, you need an active SiriusXM subscription
           that includes streaming access. Don't have one yet?
         </Text>
-        <TouchableOpacity style={styles.subscribeButton}>
-          <Text style={styles.subscribeButtonText}>Subscribe to SiriusXM</Text>
+        <TouchableOpacity style={styles.subscribeButton} onPress={openSiriusXM}>
+          <Text style={styles.subscribeButtonText}>Listen on SiriusXM</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.bottomSpacing} />
+
+      {/* SiriusXM Web Player Modal */}
+      <SiriusXMPlayer
+        visible={showSiriusXMPlayer}
+        onClose={() => setShowSiriusXMPlayer(false)}
+      />
     </ScrollView>
   );
 }
