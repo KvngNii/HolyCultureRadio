@@ -1,0 +1,43 @@
+{
+  "name": "HolyCultureRadio",
+  "displayName": "Holy Culture Radio",
+  "version": "1.0.0",
+  "description": "The official Holy Culture Radio app - Your destination for Christian music, devotionals, podcasts, and community.",
+  "expo": {
+    "name": "Holy Culture Radio",
+    "slug": "holy-culture-radio",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./src/assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./src/assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0D0D0D"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.holycultureradio.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app requires microphone access for audio features.",
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./src/assets/adaptive-icon.png",
+        "backgroundColor": "#C41E3A"
+      },
+      "package": "com.holycultureradio.app"
+    },
+    "web": {
+      "favicon": "./src/assets/favicon.png"
+    }
+  }
+}
