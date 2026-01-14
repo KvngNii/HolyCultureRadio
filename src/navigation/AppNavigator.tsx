@@ -1,17 +1,22 @@
 /**
  * Holy Culture Radio - Main App Navigator
+ * With authentication flow
  */
 
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 
 import { colors } from '../theme';
-import { RootStackParamList, BottomTabParamList } from '../types';
+import { RootStackParamList, BottomTabParamList, AuthStackParamList } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
-// Screens
+// Auth Screens
+import { LoginScreen, SignUpScreen, ForgotPasswordScreen } from '../screens/auth';
+
+// Main Screens
 import HomeScreen from '../screens/HomeScreen';
 import RadioScreen from '../screens/RadioScreen';
 import DevotionalsScreen from '../screens/DevotionalsScreen';
@@ -30,6 +35,7 @@ import TabBarIcon from '../components/TabBarIcon';
 import MiniPlayer from '../components/MiniPlayer';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const Tab = createBottomTabNavigator<BottomTabParamList>();
 
 const screenOptions = {
@@ -44,6 +50,31 @@ const screenOptions = {
     backgroundColor: colors.background,
   },
 };
+
+const authScreenOptions = {
+  headerShown: false,
+  contentStyle: {
+    backgroundColor: colors.background,
+  },
+};
+
+function LoadingScreen() {
+  return (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color={colors.primary} />
+    </View>
+  );
+}
+
+function AuthNavigator() {
+  return (
+    <AuthStack.Navigator screenOptions={authScreenOptions}>
+      <AuthStack.Screen name="Login" component={LoginScreen} />
+      <AuthStack.Screen name="SignUp" component={SignUpScreen} />
+      <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+    </AuthStack.Navigator>
+  );
+}
 
 function TabNavigator() {
   return (
@@ -123,68 +154,80 @@ function TabNavigator() {
   );
 }
 
+function MainNavigator() {
+  return (
+    <Stack.Navigator screenOptions={screenOptions}>
+      <Stack.Screen
+        name="Main"
+        component={TabNavigator}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="RadioPlayer"
+        component={RadioScreen}
+        options={{
+          title: 'Now Playing',
+          presentation: 'modal',
+        }}
+      />
+      <Stack.Screen
+        name="DevotionalDetail"
+        component={DevotionalDetailScreen}
+        options={{
+          title: 'Devotional',
+        }}
+      />
+      <Stack.Screen
+        name="PodcastPlayer"
+        component={PodcastPlayerScreen}
+        options={{
+          title: 'Now Playing',
+          presentation: 'modal',
+        }}
+      />
+      <Stack.Screen
+        name="ForumPost"
+        component={ForumPostScreen}
+        options={{
+          title: 'Discussion',
+        }}
+      />
+      <Stack.Screen
+        name="CreatePost"
+        component={CreatePostScreen}
+        options={{
+          title: 'Create Post',
+          presentation: 'modal',
+        }}
+      />
+      <Stack.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          title: 'Profile',
+        }}
+      />
+      <Stack.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          title: 'Settings',
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
+
 export default function AppNavigator() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={screenOptions}>
-        <Stack.Screen
-          name="Main"
-          component={TabNavigator}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="RadioPlayer"
-          component={RadioScreen}
-          options={{
-            title: 'Now Playing',
-            presentation: 'modal',
-          }}
-        />
-        <Stack.Screen
-          name="DevotionalDetail"
-          component={DevotionalDetailScreen}
-          options={{
-            title: 'Devotional',
-          }}
-        />
-        <Stack.Screen
-          name="PodcastPlayer"
-          component={PodcastPlayerScreen}
-          options={{
-            title: 'Now Playing',
-            presentation: 'modal',
-          }}
-        />
-        <Stack.Screen
-          name="ForumPost"
-          component={ForumPostScreen}
-          options={{
-            title: 'Discussion',
-          }}
-        />
-        <Stack.Screen
-          name="CreatePost"
-          component={CreatePostScreen}
-          options={{
-            title: 'Create Post',
-            presentation: 'modal',
-          }}
-        />
-        <Stack.Screen
-          name="Profile"
-          component={ProfileScreen}
-          options={{
-            title: 'Profile',
-          }}
-        />
-        <Stack.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={{
-            title: 'Settings',
-          }}
-        />
-      </Stack.Navigator>
+      {isAuthenticated ? <MainNavigator /> : <AuthNavigator />}
     </NavigationContainer>
   );
 }
@@ -192,6 +235,12 @@ export default function AppNavigator() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: colors.background,
   },
   tabBar: {

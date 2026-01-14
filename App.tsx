@@ -8,6 +8,7 @@ import { StatusBar, LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from './src/navigation/AppNavigator';
+import { AuthProvider } from './src/contexts/AuthContext';
 import { colors } from './src/theme';
 
 // Ignore specific warnings in development
@@ -19,11 +20,13 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <StatusBar
-          barStyle="light-content"
-          backgroundColor={colors.background}
-        />
-        <AppNavigator />
+        <AuthProvider>
+          <StatusBar
+            barStyle="light-content"
+            backgroundColor={colors.background}
+          />
+          <AppNavigator />
+        </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

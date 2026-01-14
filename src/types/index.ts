@@ -3,6 +3,12 @@
  */
 
 // Navigation Types
+export type AuthStackParamList = {
+  Login: undefined;
+  SignUp: undefined;
+  ForgotPassword: undefined;
+};
+
 export type RootStackParamList = {
   Main: undefined;
   RadioPlayer: undefined;
