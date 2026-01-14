@@ -2,33 +2,30 @@
  * Holy Culture Radio - Official Typography
  *
  * Brand Fonts:
- * - Headers: Kelson Medium (custom font)
- * - Body Text: Helvetica
+ * - Headers: Helvetica Bold
+ * - Body Text: Helvetica Regular
  *
- * NOTE: Kelson is a custom font that must be added to the project.
- * See instructions at bottom of this file.
+ * Using iOS built-in Helvetica font family
  */
 
 import { Platform, TextStyle } from 'react-native';
 
-// Font families
+// Font families - Helvetica (built into iOS)
 const fonts = {
-  // Headers - Kelson Medium (custom font, falls back to Helvetica Bold)
-  header: Platform.select({
-    ios: 'Kelson-Medium', // Custom font name after installation
-    android: 'Kelson-Medium',
-  }) || 'Helvetica-Bold',
-
-  // Body text - Helvetica
-  body: Platform.select({
+  regular: Platform.select({
     ios: 'Helvetica',
-    android: 'Helvetica', // Falls back to system sans-serif on Android
+    android: 'sans-serif',
   }) || 'System',
 
-  // Helvetica variations
-  helvetica: 'Helvetica',
-  helveticaBold: 'Helvetica-Bold',
-  helveticaLight: 'Helvetica-Light',
+  bold: Platform.select({
+    ios: 'Helvetica-Bold',
+    android: 'sans-serif-medium',
+  }) || 'System',
+
+  light: Platform.select({
+    ios: 'Helvetica-Light',
+    android: 'sans-serif-light',
+  }) || 'System',
 };
 
 const fontWeights = {
@@ -42,10 +39,10 @@ const fontWeights = {
 
 export const typography = {
   // ============================================
-  // HEADERS (Kelson Medium)
+  // HEADERS (Helvetica Bold)
   // ============================================
   h1: {
-    fontFamily: fonts.header,
+    fontFamily: fonts.bold,
     fontSize: 32,
     fontWeight: fontWeights.bold,
     lineHeight: 40,
@@ -53,7 +50,7 @@ export const typography = {
   } as TextStyle,
 
   h2: {
-    fontFamily: fonts.header,
+    fontFamily: fonts.bold,
     fontSize: 28,
     fontWeight: fontWeights.bold,
     lineHeight: 36,
@@ -61,7 +58,7 @@ export const typography = {
   } as TextStyle,
 
   h3: {
-    fontFamily: fonts.header,
+    fontFamily: fonts.bold,
     fontSize: 24,
     fontWeight: fontWeights.semibold,
     lineHeight: 32,
@@ -69,7 +66,7 @@ export const typography = {
   } as TextStyle,
 
   h4: {
-    fontFamily: fonts.header,
+    fontFamily: fonts.bold,
     fontSize: 20,
     fontWeight: fontWeights.semibold,
     lineHeight: 28,
@@ -77,48 +74,48 @@ export const typography = {
   } as TextStyle,
 
   h5: {
-    fontFamily: fonts.header,
+    fontFamily: fonts.bold,
     fontSize: 18,
     fontWeight: fontWeights.medium,
     lineHeight: 24,
   } as TextStyle,
 
   // ============================================
-  // BODY TEXT (Helvetica)
+  // BODY TEXT (Helvetica Regular)
   // ============================================
   bodyLarge: {
-    fontFamily: fonts.body,
+    fontFamily: fonts.regular,
     fontSize: 18,
     fontWeight: fontWeights.regular,
     lineHeight: 26,
   } as TextStyle,
 
   body: {
-    fontFamily: fonts.body,
+    fontFamily: fonts.regular,
     fontSize: 16,
     fontWeight: fontWeights.regular,
     lineHeight: 24,
   } as TextStyle,
 
   bodySmall: {
-    fontFamily: fonts.body,
+    fontFamily: fonts.regular,
     fontSize: 14,
     fontWeight: fontWeights.regular,
     lineHeight: 20,
   } as TextStyle,
 
   // ============================================
-  // LABELS (Helvetica)
+  // LABELS (Helvetica Regular)
   // ============================================
   label: {
-    fontFamily: fonts.body,
+    fontFamily: fonts.regular,
     fontSize: 14,
     fontWeight: fontWeights.medium,
     lineHeight: 20,
   } as TextStyle,
 
   labelSmall: {
-    fontFamily: fonts.body,
+    fontFamily: fonts.regular,
     fontSize: 12,
     fontWeight: fontWeights.medium,
     lineHeight: 16,
@@ -126,20 +123,20 @@ export const typography = {
   } as TextStyle,
 
   // ============================================
-  // CAPTION (Helvetica)
+  // CAPTION (Helvetica Regular)
   // ============================================
   caption: {
-    fontFamily: fonts.body,
+    fontFamily: fonts.regular,
     fontSize: 12,
     fontWeight: fontWeights.regular,
     lineHeight: 16,
   } as TextStyle,
 
   // ============================================
-  // BUTTONS (Kelson for prominent, Helvetica for secondary)
+  // BUTTONS (Helvetica Bold)
   // ============================================
   button: {
-    fontFamily: fonts.header,
+    fontFamily: fonts.bold,
     fontSize: 16,
     fontWeight: fontWeights.semibold,
     lineHeight: 24,
@@ -147,7 +144,7 @@ export const typography = {
   } as TextStyle,
 
   buttonSmall: {
-    fontFamily: fonts.body,
+    fontFamily: fonts.regular,
     fontSize: 14,
     fontWeight: fontWeights.semibold,
     lineHeight: 20,
@@ -158,7 +155,7 @@ export const typography = {
   // SPECIAL STYLES
   // ============================================
   nowPlaying: {
-    fontFamily: fonts.header,
+    fontFamily: fonts.bold,
     fontSize: 14,
     fontWeight: fontWeights.bold,
     lineHeight: 18,
@@ -167,7 +164,7 @@ export const typography = {
   } as TextStyle,
 
   brandTitle: {
-    fontFamily: fonts.header,
+    fontFamily: fonts.bold,
     fontSize: 36,
     fontWeight: fontWeights.bold,
     lineHeight: 44,
@@ -175,7 +172,7 @@ export const typography = {
   } as TextStyle,
 
   sectionTitle: {
-    fontFamily: fonts.header,
+    fontFamily: fonts.bold,
     fontSize: 22,
     fontWeight: fontWeights.semibold,
     lineHeight: 28,
@@ -187,55 +184,3 @@ export const typography = {
 export { fonts };
 
 export default typography;
-
-/**
- * ============================================
- * HOW TO ADD KELSON FONT TO YOUR PROJECT
- * ============================================
- *
- * 1. OBTAIN THE FONT:
- *    - Kelson is a commercial font by Fontfabric
- *    - Purchase/download from: https://www.fontfabric.com/fonts/kelson/
- *    - You need: Kelson-Medium.ttf (or .otf)
- *
- * 2. ADD FONT FILES TO PROJECT:
- *    - Create folder: src/assets/fonts/
- *    - Copy Kelson-Medium.ttf to that folder
- *
- * 3. CONFIGURE REACT NATIVE:
- *
- *    Create/update react-native.config.js:
- *    ```
- *    module.exports = {
- *      project: {
- *        ios: {},
- *        android: {},
- *      },
- *      assets: ['./src/assets/fonts/'],
- *    };
- *    ```
- *
- * 4. LINK THE FONTS:
- *    ```bash
- *    npx react-native-asset
- *    ```
- *
- * 5. FOR iOS - Update Info.plist:
- *    Add to ios/HolyCultureRadio/Info.plist:
- *    ```xml
- *    <key>UIAppFonts</key>
- *    <array>
- *      <string>Kelson-Medium.ttf</string>
- *    </array>
- *    ```
- *
- * 6. REBUILD THE APP:
- *    ```bash
- *    cd ios && pod install && cd ..
- *    npm run ios
- *    ```
- *
- * FALLBACK:
- * If Kelson is not available, the app will use Helvetica-Bold
- * as a fallback for headers.
- */
