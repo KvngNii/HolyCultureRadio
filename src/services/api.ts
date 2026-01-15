@@ -1,18 +1,30 @@
 /**
  * Holy Culture Radio - API Service
- * Handles all API communications
+ * Secure API communications with best practices
  */
 
 import { ApiResponse, PaginatedResponse } from '../types';
+import { AppConfig } from '../config';
+import { pinnedFetch } from '../utils/sslPinning';
 
-const API_BASE_URL = 'https://api.holycultureradio.com/v1';
+// Export config for use in auth service
+export const API_CONFIG = {
+  BASE_URL: AppConfig.api.baseUrl,
+  TIMEOUT: AppConfig.api.timeout,
+};
+
+// Request ID for tracing
+let requestId = 0;
+const generateRequestId = () => `req_${Date.now()}_${++requestId}`;
 
 class ApiService {
   private baseUrl: string;
   private authToken: string | null = null;
+  private timeout: number;
 
-  constructor(baseUrl: string = API_BASE_URL) {
-    this.baseUrl = baseUrl;
+  constructor() {
+    this.baseUrl = API_CONFIG.BASE_URL;
+    this.timeout = API_CONFIG.TIMEOUT;
   }
 
   setAuthToken(token: string) {
@@ -27,8 +39,18 @@ class ApiService {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
+    const requestTraceId = generateRequestId();
+
+    // Security headers
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-Request-ID': requestTraceId,
+      'X-Client-Version': '1.0.0',
+      'X-Platform': 'ios',
+      // Prevent caching of sensitive data
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      'Pragma': 'no-cache',
       ...options.headers,
     };
 
@@ -36,19 +58,46 @@ class ApiService {
       headers['Authorization'] = `Bearer ${this.authToken}`;
     }
 
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
     try {
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      // Use SSL pinned fetch in production
+      const fetchFn = AppConfig.ssl.enabled ? pinnedFetch : fetch;
+
+      const response = await fetchFn(`${this.baseUrl}${endpoint}`, {
         ...options,
         headers,
+        signal: controller.signal,
       });
 
-      const data = await response.json();
+      clearTimeout(timeoutId);
+
+      // Handle non-JSON responses gracefully
+      const contentType = response.headers.get('content-type');
+      let data: any;
+
+      if (contentType?.includes('application/json')) {
+        data = await response.json();
+      } else {
+        data = await response.text();
+      }
 
       if (!response.ok) {
+        // Log error for debugging (in production, send to error tracking service)
+        if (__DEV__) {
+          console.error(`API Error [${requestTraceId}]:`, {
+            endpoint,
+            status: response.status,
+            error: data,
+          });
+        }
+
         return {
           data: null as T,
           success: false,
-          error: data.message || 'An error occurred',
+          error: typeof data === 'object' ? data.message : 'An error occurred',
         };
       }
 
@@ -57,10 +106,29 @@ class ApiService {
         success: true,
       };
     } catch (error) {
+      clearTimeout(timeoutId);
+
+      // Handle specific error types
+      let errorMessage = 'Network error';
+
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = 'Request timeout. Please try again.';
+        } else if (error.message.includes('SSL')) {
+          errorMessage = 'Secure connection failed. Please check your network.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+
+      if (__DEV__) {
+        console.error(`API Error [${requestTraceId}]:`, error);
+      }
+
       return {
         data: null as T,
         success: false,
-        error: error instanceof Error ? error.message : 'Network error',
+        error: errorMessage,
       };
     }
   }
@@ -82,6 +150,27 @@ class ApiService {
 
   async logout() {
     return this.request('/auth/logout', { method: 'POST' });
+  }
+
+  async refreshToken(refreshToken: string) {
+    return this.request('/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken }),
+    });
+  }
+
+  async forgotPassword(email: string) {
+    return this.request('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async resetPassword(token: string, password: string) {
+    return this.request('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
+    });
   }
 
   // Devotionals
