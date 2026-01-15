@@ -1,21 +1,18 @@
 /**
  * Holy Culture Radio - Authentication Service
- * Secure authentication with token management, biometrics, and session handling
+ * Secure authentication using Supabase Auth with biometrics support
  */
 
 import * as Keychain from 'react-native-keychain';
 import { Platform } from 'react-native';
-import { API_CONFIG } from './api';
+import { supabase } from '../lib/supabase';
 import { loginRateLimiter, passwordResetRateLimiter } from '../utils/validation';
+import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
+import type { Profile } from '../lib/database.types';
 
 // Auth configuration
 const AUTH_CONFIG = {
-  TOKEN_KEY: 'holy_culture_auth_token',
-  REFRESH_TOKEN_KEY: 'holy_culture_refresh_token',
-  USER_KEY: 'holy_culture_user',
   BIOMETRIC_KEY: 'holy_culture_biometric',
-  TOKEN_EXPIRY_BUFFER: 300000, // 5 minutes before actual expiry
-  SESSION_TIMEOUT: 3600000, // 1 hour
 };
 
 export interface User {
@@ -23,14 +20,10 @@ export interface User {
   username: string;
   email: string;
   avatarUrl?: string;
+  bio?: string;
+  role: 'member' | 'moderator' | 'admin';
+  isVerified: boolean;
   createdAt: string;
-  isEmailVerified: boolean;
-}
-
-export interface AuthTokens {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
 }
 
 export interface AuthResult {
@@ -43,10 +36,23 @@ export interface AuthResult {
 type AuthStateListener = (isAuthenticated: boolean, user: User | null) => void;
 const authStateListeners: AuthStateListener[] = [];
 
+// Convert Supabase profile to app User
+function profileToUser(profile: Profile): User {
+  return {
+    id: profile.id,
+    username: profile.username,
+    email: profile.email,
+    avatarUrl: profile.avatar_url || undefined,
+    bio: profile.bio || undefined,
+    role: profile.role,
+    isVerified: profile.is_verified,
+    createdAt: profile.created_at,
+  };
+}
+
 class AuthService {
   private currentUser: User | null = null;
-  private tokens: AuthTokens | null = null;
-  private tokenRefreshTimer: NodeJS.Timeout | null = null;
+  private session: Session | null = null;
   private isInitialized: boolean = false;
 
   /**
@@ -56,12 +62,60 @@ class AuthService {
     if (this.isInitialized) return;
 
     try {
-      // Try to restore session from secure storage
-      await this.restoreSession();
+      // Get initial session
+      const { data: { session }, error } = await supabase.auth.getSession();
+
+      if (error) {
+        console.error('Get session error:', error);
+      }
+
+      if (session) {
+        this.session = session;
+        await this.fetchUserProfile(session.user.id);
+      }
+
+      // Listen for auth state changes
+      supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('Auth state changed:', event);
+
+        this.session = session;
+
+        if (session) {
+          await this.fetchUserProfile(session.user.id);
+          this.notifyAuthStateChange(true, this.currentUser);
+        } else {
+          this.currentUser = null;
+          this.notifyAuthStateChange(false, null);
+        }
+      });
+
       this.isInitialized = true;
     } catch (error) {
       console.error('Auth initialization error:', error);
-      await this.clearSession();
+    }
+  }
+
+  /**
+   * Fetch user profile from Supabase
+   */
+  private async fetchUserProfile(userId: string): Promise<void> {
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Fetch profile error:', error);
+        return;
+      }
+
+      if (profile) {
+        this.currentUser = profileToUser(profile);
+      }
+    } catch (error) {
+      console.error('Fetch profile error:', error);
     }
   }
 
@@ -70,26 +124,59 @@ class AuthService {
    */
   async register(username: string, email: string, password: string): Promise<AuthResult> {
     try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, email, password }),
-      });
+      // Check if username is already taken
+      const { data: existingUser } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('username', username)
+        .single();
 
-      const data = await response.json();
-
-      if (!response.ok) {
+      if (existingUser) {
         return {
           success: false,
-          error: data.message || 'Registration failed',
+          error: 'Username is already taken',
         };
       }
 
+      // Sign up with Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            username, // This will be available in the trigger
+          },
+        },
+      });
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
+      if (!data.user) {
+        return {
+          success: false,
+          error: 'Registration failed',
+        };
+      }
+
+      // If email confirmation is required
+      if (!data.session) {
+        return {
+          success: true,
+          error: 'Please check your email to confirm your account',
+        };
+      }
+
+      // Fetch the user profile
+      await this.fetchUserProfile(data.user.id);
+
       return {
         success: true,
-        user: data.user,
+        user: this.currentUser || undefined,
       };
     } catch (error) {
       console.error('Registration error:', error);
@@ -106,9 +193,7 @@ class AuthService {
   async login(email: string, password: string): Promise<AuthResult> {
     // Check rate limiting
     if (loginRateLimiter.isRateLimited(email)) {
-      const remaining = Math.ceil(
-        (300000 - (Date.now() % 300000)) / 60000
-      );
+      const remaining = Math.ceil((300000 - (Date.now() % 300000)) / 60000);
       return {
         success: false,
         error: `Too many login attempts. Please try again in ${remaining} minutes.`,
@@ -118,46 +203,34 @@ class AuthService {
     loginRateLimiter.recordAttempt(email);
 
     try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
+      if (error) {
         return {
           success: false,
-          error: data.message || 'Invalid email or password',
+          error: error.message,
         };
       }
 
-      // Store tokens securely
-      await this.saveTokens({
-        accessToken: data.accessToken,
-        refreshToken: data.refreshToken,
-        expiresAt: Date.now() + (data.expiresIn * 1000),
-      });
-
-      // Store user data
-      this.currentUser = data.user;
-      await this.saveUser(data.user);
+      if (!data.user || !data.session) {
+        return {
+          success: false,
+          error: 'Login failed',
+        };
+      }
 
       // Reset rate limiter on successful login
       loginRateLimiter.reset(email);
 
-      // Schedule token refresh
-      this.scheduleTokenRefresh();
-
-      // Notify listeners
-      this.notifyAuthStateChange(true, data.user);
+      // Fetch user profile
+      await this.fetchUserProfile(data.user.id);
 
       return {
         success: true,
-        user: data.user,
+        user: this.currentUser || undefined,
       };
     } catch (error) {
       console.error('Login error:', error);
@@ -169,21 +242,47 @@ class AuthService {
   }
 
   /**
+   * Login with OAuth provider (Google, Apple, etc.)
+   */
+  async loginWithOAuth(provider: 'google' | 'apple'): Promise<AuthResult> {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: 'holycultureradio://auth/callback',
+        },
+      });
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('OAuth login error:', error);
+      return {
+        success: false,
+        error: 'OAuth login failed',
+      };
+    }
+  }
+
+  /**
    * Logout and clear session
    */
   async logout(): Promise<void> {
     try {
-      // Call logout endpoint to invalidate tokens on server
-      if (this.tokens?.accessToken) {
-        await fetch(`${API_CONFIG.BASE_URL}/auth/logout`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.tokens.accessToken}`,
-          },
-        }).catch(() => {}); // Ignore errors
-      }
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Logout error:', error);
     } finally {
-      await this.clearSession();
+      this.currentUser = null;
+      this.session = null;
       this.notifyAuthStateChange(false, null);
     }
   }
@@ -203,13 +302,13 @@ class AuthService {
     passwordResetRateLimiter.recordAttempt(email);
 
     try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/forgot-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'holycultureradio://auth/reset-password',
       });
+
+      if (error) {
+        console.error('Password reset error:', error);
+      }
 
       // Always return success to prevent email enumeration
       return {
@@ -225,33 +324,72 @@ class AuthService {
   }
 
   /**
-   * Reset password with token
+   * Update password (when user has reset token)
    */
-  async resetPassword(token: string, newPassword: string): Promise<AuthResult> {
+  async updatePassword(newPassword: string): Promise<AuthResult> {
     try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/reset-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ token, password: newPassword }),
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
+      if (error) {
         return {
           success: false,
-          error: data.message || 'Password reset failed',
+          error: error.message,
         };
       }
 
       return { success: true };
     } catch (error) {
-      console.error('Reset password error:', error);
+      console.error('Update password error:', error);
       return {
         success: false,
         error: 'Network error. Please try again.',
+      };
+    }
+  }
+
+  /**
+   * Update user profile
+   */
+  async updateProfile(updates: Partial<Pick<User, 'username' | 'bio' | 'avatarUrl'>>): Promise<AuthResult> {
+    if (!this.currentUser) {
+      return {
+        success: false,
+        error: 'Not authenticated',
+      };
+    }
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          username: updates.username,
+          bio: updates.bio,
+          avatar_url: updates.avatarUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', this.currentUser.id);
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
+      // Refresh profile
+      await this.fetchUserProfile(this.currentUser.id);
+
+      return {
+        success: true,
+        user: this.currentUser || undefined,
+      };
+    } catch (error) {
+      console.error('Update profile error:', error);
+      return {
+        success: false,
+        error: 'Failed to update profile',
       };
     }
   }
@@ -357,61 +495,11 @@ class AuthService {
   }
 
   /**
-   * Refresh access token
-   */
-  async refreshToken(): Promise<boolean> {
-    if (!this.tokens?.refreshToken) {
-      return false;
-    }
-
-    try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ refreshToken: this.tokens.refreshToken }),
-      });
-
-      if (!response.ok) {
-        // Refresh token expired or invalid - logout
-        await this.logout();
-        return false;
-      }
-
-      const data = await response.json();
-
-      await this.saveTokens({
-        accessToken: data.accessToken,
-        refreshToken: data.refreshToken || this.tokens.refreshToken,
-        expiresAt: Date.now() + (data.expiresIn * 1000),
-      });
-
-      this.scheduleTokenRefresh();
-      return true;
-    } catch (error) {
-      console.error('Token refresh error:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Get current access token (refreshes if needed)
+   * Get current access token
    */
   async getAccessToken(): Promise<string | null> {
-    if (!this.tokens) {
-      return null;
-    }
-
-    // Check if token needs refresh
-    if (Date.now() >= this.tokens.expiresAt - AUTH_CONFIG.TOKEN_EXPIRY_BUFFER) {
-      const refreshed = await this.refreshToken();
-      if (!refreshed) {
-        return null;
-      }
-    }
-
-    return this.tokens.accessToken;
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token || null;
   }
 
   /**
@@ -422,10 +510,17 @@ class AuthService {
   }
 
   /**
+   * Get current session
+   */
+  getSession(): Session | null {
+    return this.session;
+  }
+
+  /**
    * Check if user is authenticated
    */
   isAuthenticated(): boolean {
-    return !!this.currentUser && !!this.tokens;
+    return !!this.currentUser && !!this.session;
   }
 
   /**
@@ -450,109 +545,6 @@ class AuthService {
 
   private notifyAuthStateChange(isAuthenticated: boolean, user: User | null): void {
     authStateListeners.forEach(listener => listener(isAuthenticated, user));
-  }
-
-  private async saveTokens(tokens: AuthTokens): Promise<void> {
-    this.tokens = tokens;
-    try {
-      await Keychain.setGenericPassword(
-        'tokens',
-        JSON.stringify(tokens),
-        {
-          service: AUTH_CONFIG.TOKEN_KEY,
-          accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-        }
-      );
-    } catch (error) {
-      console.error('Save tokens error:', error);
-    }
-  }
-
-  private async saveUser(user: User): Promise<void> {
-    try {
-      await Keychain.setGenericPassword(
-        'user',
-        JSON.stringify(user),
-        {
-          service: AUTH_CONFIG.USER_KEY,
-          accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-        }
-      );
-    } catch (error) {
-      console.error('Save user error:', error);
-    }
-  }
-
-  private async restoreSession(): Promise<void> {
-    try {
-      // Restore tokens
-      const tokenCredentials = await Keychain.getGenericPassword({
-        service: AUTH_CONFIG.TOKEN_KEY,
-      });
-
-      if (tokenCredentials) {
-        this.tokens = JSON.parse(tokenCredentials.password);
-
-        // Check if token is expired
-        if (this.tokens && Date.now() >= this.tokens.expiresAt) {
-          // Try to refresh
-          const refreshed = await this.refreshToken();
-          if (!refreshed) {
-            throw new Error('Token refresh failed');
-          }
-        } else {
-          this.scheduleTokenRefresh();
-        }
-      }
-
-      // Restore user
-      const userCredentials = await Keychain.getGenericPassword({
-        service: AUTH_CONFIG.USER_KEY,
-      });
-
-      if (userCredentials) {
-        this.currentUser = JSON.parse(userCredentials.password);
-      }
-
-      if (this.currentUser && this.tokens) {
-        this.notifyAuthStateChange(true, this.currentUser);
-      }
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  private async clearSession(): Promise<void> {
-    this.currentUser = null;
-    this.tokens = null;
-
-    if (this.tokenRefreshTimer) {
-      clearTimeout(this.tokenRefreshTimer);
-      this.tokenRefreshTimer = null;
-    }
-
-    try {
-      await Keychain.resetGenericPassword({ service: AUTH_CONFIG.TOKEN_KEY });
-      await Keychain.resetGenericPassword({ service: AUTH_CONFIG.USER_KEY });
-    } catch (error) {
-      console.error('Clear session error:', error);
-    }
-  }
-
-  private scheduleTokenRefresh(): void {
-    if (this.tokenRefreshTimer) {
-      clearTimeout(this.tokenRefreshTimer);
-    }
-
-    if (!this.tokens) return;
-
-    const refreshTime = this.tokens.expiresAt - AUTH_CONFIG.TOKEN_EXPIRY_BUFFER - Date.now();
-
-    if (refreshTime > 0) {
-      this.tokenRefreshTimer = setTimeout(() => {
-        this.refreshToken();
-      }, refreshTime);
-    }
   }
 }
 
