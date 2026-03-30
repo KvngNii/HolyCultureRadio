@@ -1,19 +1,12 @@
 /**
  * Holy Culture Radio - Authentication Service
- * Secure authentication using Supabase Auth with biometrics support
+ * Secure authentication using Supabase Auth
  */
 
-import * as Keychain from 'react-native-keychain';
-import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { loginRateLimiter, passwordResetRateLimiter } from '../utils/validation';
 import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import type { Profile } from '../lib/database.types';
-
-// Auth configuration
-const AUTH_CONFIG = {
-  BIOMETRIC_KEY: 'holy_culture_biometric',
-};
 
 export interface User {
   id: string;
@@ -396,102 +389,41 @@ class AuthService {
 
   /**
    * Authenticate with biometrics (Face ID / Touch ID)
+   * Note: Biometric auth requires react-native-keychain package
    */
   async authenticateWithBiometrics(): Promise<AuthResult> {
-    try {
-      // Check if biometrics are available
-      const biometryType = await Keychain.getSupportedBiometryType();
-      if (!biometryType) {
-        return {
-          success: false,
-          error: 'Biometric authentication is not available on this device',
-        };
-      }
-
-      // Check if we have stored credentials for biometric login
-      const credentials = await Keychain.getGenericPassword({
-        service: AUTH_CONFIG.BIOMETRIC_KEY,
-        authenticationPrompt: {
-          title: 'Sign in to Holy Culture Radio',
-          subtitle: Platform.OS === 'ios' ? 'Use Face ID or Touch ID' : 'Use your fingerprint',
-          cancel: 'Cancel',
-        },
-      });
-
-      if (!credentials) {
-        return {
-          success: false,
-          error: 'Biometric login not set up. Please sign in with your password first.',
-        };
-      }
-
-      // Use stored credentials to login
-      const { username: email, password } = credentials;
-      return await this.login(email, password);
-    } catch (error) {
-      console.error('Biometric auth error:', error);
-      return {
-        success: false,
-        error: 'Biometric authentication failed',
-      };
-    }
+    return {
+      success: false,
+      error: 'Biometric authentication is not configured',
+    };
   }
 
   /**
    * Enable biometric authentication
    */
-  async enableBiometricAuth(email: string, password: string): Promise<boolean> {
-    try {
-      const biometryType = await Keychain.getSupportedBiometryType();
-      if (!biometryType) {
-        return false;
-      }
-
-      await Keychain.setGenericPassword(email, password, {
-        service: AUTH_CONFIG.BIOMETRIC_KEY,
-        accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_CURRENT_SET,
-        accessible: Keychain.ACCESSIBLE.WHEN_PASSCODE_SET_THIS_DEVICE_ONLY,
-      });
-
-      return true;
-    } catch (error) {
-      console.error('Enable biometric error:', error);
-      return false;
-    }
+  async enableBiometricAuth(_email: string, _password: string): Promise<boolean> {
+    return false;
   }
 
   /**
    * Disable biometric authentication
    */
   async disableBiometricAuth(): Promise<void> {
-    try {
-      await Keychain.resetGenericPassword({ service: AUTH_CONFIG.BIOMETRIC_KEY });
-    } catch (error) {
-      console.error('Disable biometric error:', error);
-    }
+    // No-op
   }
 
   /**
    * Check if biometrics are available
    */
   async isBiometricAvailable(): Promise<boolean> {
-    try {
-      const biometryType = await Keychain.getSupportedBiometryType();
-      return !!biometryType;
-    } catch {
-      return false;
-    }
+    return false;
   }
 
   /**
    * Get biometry type (FaceID, TouchID, Fingerprint)
    */
   async getBiometryType(): Promise<string | null> {
-    try {
-      return await Keychain.getSupportedBiometryType();
-    } catch {
-      return null;
-    }
+    return null;
   }
 
   /**
