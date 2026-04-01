@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../theme';
 
 interface TabBarIconProps {
@@ -13,23 +14,23 @@ interface TabBarIconProps {
   size: number;
 }
 
+// Map route names to icons
+const iconMap: Record<string, string> = {
+  Home: 'home',
+  Radio: 'radio',
+  Devotionals: 'book-open-page-variant',
+  Podcasts: 'microphone',
+  Music: 'music-note',
+  Forum: 'forum',
+};
+
 export default function TabBarIcon({ routeName, focused, color, size }: TabBarIconProps) {
+  const iconName = iconMap[routeName] || 'circle';
   const iconColor = focused ? colors.primary : colors.textMuted;
 
   return (
-    <View style={[styles.container, { width: size, height: size }]}>
-      <View style={[styles.iconWrapper, focused && styles.focusedIcon]}>
-        <View
-          style={[
-            styles.simpleIcon,
-            {
-              backgroundColor: iconColor,
-              width: size - 8,
-              height: size - 8,
-            }
-          ]}
-        />
-      </View>
+    <View style={[styles.container, focused && styles.focusedContainer]}>
+      <Icon name={iconName} size={size} color={iconColor} />
     </View>
   );
 }
@@ -38,18 +39,10 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  iconWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 8,
     padding: 4,
+    borderRadius: 8,
   },
-  focusedIcon: {
+  focusedContainer: {
     backgroundColor: 'rgba(196, 30, 58, 0.1)',
-  },
-  simpleIcon: {
-    borderRadius: 4,
-    opacity: 0.9,
   },
 });
