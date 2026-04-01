@@ -14,8 +14,10 @@ import {
   Alert,
 } from 'react-native';
 import { colors, typography, spacing } from '../theme';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function SettingsScreen() {
+  const { user, logout } = useAuth();
   const [notifications, setNotifications] = useState(true);
   const [emailDigest, setEmailDigest] = useState(false);
   const [autoPlay, setAutoPlay] = useState(true);
@@ -28,7 +30,7 @@ export default function SettingsScreen() {
       'Are you sure you want to sign out?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign Out', style: 'destructive', onPress: () => {} },
+        { text: 'Sign Out', style: 'destructive', onPress: () => logout() },
       ]
     );
   };
@@ -74,7 +76,7 @@ export default function SettingsScreen() {
             <Text style={styles.settingIcon}>📧</Text>
             <View>
               <Text style={styles.settingLabel}>Email</Text>
-              <Text style={styles.settingDescription}>user@example.com</Text>
+              <Text style={styles.settingDescription}>{user?.email || 'Not set'}</Text>
             </View>
           </View>
           <Text style={styles.chevron}>›</Text>
