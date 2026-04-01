@@ -4,10 +4,10 @@
  */
 
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
+import { createNativeStackNavigator, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, StyleSheet, Platform, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Platform, ActivityIndicator, TouchableOpacity, Text } from 'react-native';
 
 import { colors } from '../theme';
 import { RootStackParamList, BottomTabParamList, AuthStackParamList } from '../types';
@@ -77,6 +77,18 @@ function AuthNavigator() {
   );
 }
 
+function SettingsButton() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  return (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('Settings')}
+      style={{ padding: 8 }}
+    >
+      <Text style={{ fontSize: 22 }}>⚙️</Text>
+    </TouchableOpacity>
+  );
+}
+
 function TabNavigator() {
   return (
     <View style={styles.container}>
@@ -107,6 +119,7 @@ function TabNavigator() {
           options={{
             title: 'Holy Culture',
             headerTitle: 'Holy Culture Radio',
+            headerRight: () => <SettingsButton />,
           }}
         />
         <Tab.Screen
