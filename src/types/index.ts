@@ -14,6 +14,7 @@ export type RootStackParamList = {
   RadioPlayer: undefined;
   PodcastPlayer: { podcastId: string };
   DevotionalDetail: { devotionalId: string };
+  CreateDevotional: undefined;
   ForumPost: { postId: string };
   CreatePost: undefined;
   Profile: { userId: string };

@@ -21,6 +21,7 @@ import HomeScreen from '../screens/HomeScreen';
 import RadioScreen from '../screens/RadioScreen';
 import DevotionalsScreen from '../screens/DevotionalsScreen';
 import DevotionalDetailScreen from '../screens/DevotionalDetailScreen';
+import CreateDevotionalScreen from '../screens/CreateDevotionalScreen';
 import PodcastsScreen from '../screens/PodcastsScreen';
 import PodcastPlayerScreen from '../screens/PodcastPlayerScreen';
 import MusicScreen from '../screens/MusicScreen';
@@ -175,6 +176,14 @@ function MainNavigator() {
         component={DevotionalDetailScreen}
         options={{
           title: 'Devotional',
+        }}
+      />
+      <Stack.Screen
+        name="CreateDevotional"
+        component={CreateDevotionalScreen}
+        options={{
+          title: 'Write Devotional',
+          presentation: 'modal',
         }}
       />
       <Stack.Screen

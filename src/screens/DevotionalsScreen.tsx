@@ -276,7 +276,10 @@ export default function DevotionalsScreen() {
       />
 
       {/* Submit Devotional FAB */}
-      <TouchableOpacity style={styles.fab}>
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => navigation.navigate('CreateDevotional')}
+      >
         <Text style={styles.fabIcon}>✍️</Text>
       </TouchableOpacity>
     </View>
@@ -300,14 +303,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   categoriesContainer: {
-    maxHeight: 50,
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   categoriesContent: {
     paddingHorizontal: spacing.screenPadding,
-    paddingVertical: spacing.sm,
-    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
   },
   categoryPill: {
     paddingHorizontal: spacing.md,
