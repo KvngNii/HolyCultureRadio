@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   Switch,
   Alert,
+  Linking,
 } from 'react-native';
 import { colors, typography, spacing } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,6 +24,11 @@ export default function SettingsScreen() {
   const [autoPlay, setAutoPlay] = useState(true);
   const [downloadOnWifi, setDownloadOnWifi] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
+  const [audioQuality, setAudioQuality] = useState('High (320 kbps)');
+
+  const showComingSoon = (feature: string) => {
+    Alert.alert('Coming Soon', `${feature} will be available in a future update.`);
+  };
 
   const handleSignOut = () => {
     Alert.alert(
@@ -38,10 +44,63 @@ export default function SettingsScreen() {
   const handleDeleteAccount = () => {
     Alert.alert(
       'Delete Account',
-      'This action cannot be undone. All your data will be permanently deleted.',
+      'This action cannot be undone. All your data will be permanently deleted. Are you sure?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => {} },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Contact Support',
+              'To delete your account, please contact support@holycultureradio.com'
+            );
+          },
+        },
+      ]
+    );
+  };
+
+  const handleAudioQuality = () => {
+    Alert.alert(
+      'Audio Quality',
+      'Select your preferred audio quality',
+      [
+        { text: 'Low (128 kbps)', onPress: () => setAudioQuality('Low (128 kbps)') },
+        { text: 'Medium (192 kbps)', onPress: () => setAudioQuality('Medium (192 kbps)') },
+        { text: 'High (320 kbps)', onPress: () => setAudioQuality('High (320 kbps)') },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const handleOpenLink = async (url: string, title: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Error', `Unable to open ${title}`);
+      }
+    } catch (error) {
+      Alert.alert('Error', `Unable to open ${title}`);
+    }
+  };
+
+  const handleContactUs = () => {
+    Alert.alert(
+      'Contact Us',
+      'How would you like to reach us?',
+      [
+        {
+          text: 'Email',
+          onPress: () => handleOpenLink('mailto:support@holycultureradio.com', 'Email'),
+        },
+        {
+          text: 'Website',
+          onPress: () => handleOpenLink('https://holycultureradio.com', 'Website'),
+        },
+        { text: 'Cancel', style: 'cancel' },
       ]
     );
   };
@@ -51,7 +110,10 @@ export default function SettingsScreen() {
       {/* Account Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account</Text>
-        <TouchableOpacity style={styles.settingItem}>
+        <TouchableOpacity
+          style={styles.settingItem}
+          onPress={() => showComingSoon('Edit Profile')}
+        >
           <View style={styles.settingInfo}>
             <Text style={styles.settingIcon}>👤</Text>
             <View>
@@ -61,7 +123,10 @@ export default function SettingsScreen() {
           </View>
           <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.settingItem}>
+        <TouchableOpacity
+          style={styles.settingItem}
+          onPress={() => showComingSoon('Change Password')}
+        >
           <View style={styles.settingInfo}>
             <Text style={styles.settingIcon}>🔐</Text>
             <View>
@@ -71,7 +136,7 @@ export default function SettingsScreen() {
           </View>
           <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.settingItem}>
+        <View style={styles.settingItem}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingIcon}>📧</Text>
             <View>
@@ -79,8 +144,7 @@ export default function SettingsScreen() {
               <Text style={styles.settingDescription}>{user?.email || 'Not set'}</Text>
             </View>
           </View>
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
+        </View>
       </View>
 
       {/* Notifications Section */}
@@ -151,12 +215,12 @@ export default function SettingsScreen() {
             thumbColor={colors.textOnPrimary}
           />
         </View>
-        <TouchableOpacity style={styles.settingItem}>
+        <TouchableOpacity style={styles.settingItem} onPress={handleAudioQuality}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingIcon}>🎧</Text>
             <View>
               <Text style={styles.settingLabel}>Audio Quality</Text>
-              <Text style={styles.settingDescription}>High (320 kbps)</Text>
+              <Text style={styles.settingDescription}>{audioQuality}</Text>
             </View>
           </View>
           <Text style={styles.chevron}>›</Text>
@@ -186,7 +250,10 @@ export default function SettingsScreen() {
       {/* Connected Services */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Connected Services</Text>
-        <TouchableOpacity style={styles.settingItem}>
+        <TouchableOpacity
+          style={styles.settingItem}
+          onPress={() => showComingSoon('Spotify integration')}
+        >
           <View style={styles.settingInfo}>
             <Text style={styles.settingIcon}>🎵</Text>
             <View>
@@ -196,7 +263,10 @@ export default function SettingsScreen() {
           </View>
           <Text style={styles.connectText}>Connect</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.settingItem}>
+        <TouchableOpacity
+          style={styles.settingItem}
+          onPress={() => showComingSoon('SiriusXM integration')}
+        >
           <View style={styles.settingInfo}>
             <Text style={styles.settingIcon}>📻</Text>
             <View>
@@ -211,7 +281,10 @@ export default function SettingsScreen() {
       {/* Support Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Support</Text>
-        <TouchableOpacity style={styles.settingItem}>
+        <TouchableOpacity
+          style={styles.settingItem}
+          onPress={() => handleOpenLink('https://holycultureradio.com/help', 'Help Center')}
+        >
           <View style={styles.settingInfo}>
             <Text style={styles.settingIcon}>❓</Text>
             <View>
@@ -221,7 +294,7 @@ export default function SettingsScreen() {
           </View>
           <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.settingItem}>
+        <TouchableOpacity style={styles.settingItem} onPress={handleContactUs}>
           <View style={styles.settingInfo}>
             <Text style={styles.settingIcon}>💬</Text>
             <View>
@@ -231,12 +304,15 @@ export default function SettingsScreen() {
           </View>
           <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.settingItem}>
+        <TouchableOpacity
+          style={styles.settingItem}
+          onPress={() => Alert.alert('Rate the App', 'Thank you for your support! Rating will be available when the app is published.')}
+        >
           <View style={styles.settingInfo}>
             <Text style={styles.settingIcon}>⭐</Text>
             <View>
               <Text style={styles.settingLabel}>Rate the App</Text>
-              <Text style={styles.settingDescription}>Leave a review on the App Store</Text>
+              <Text style={styles.settingDescription}>Leave a review</Text>
             </View>
           </View>
           <Text style={styles.chevron}>›</Text>
@@ -246,7 +322,10 @@ export default function SettingsScreen() {
       {/* Legal Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Legal</Text>
-        <TouchableOpacity style={styles.settingItem}>
+        <TouchableOpacity
+          style={styles.settingItem}
+          onPress={() => handleOpenLink('https://holycultureradio.com/terms', 'Terms of Service')}
+        >
           <View style={styles.settingInfo}>
             <Text style={styles.settingIcon}>📄</Text>
             <View>
@@ -255,7 +334,10 @@ export default function SettingsScreen() {
           </View>
           <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.settingItem}>
+        <TouchableOpacity
+          style={styles.settingItem}
+          onPress={() => handleOpenLink('https://holycultureradio.com/privacy', 'Privacy Policy')}
+        >
           <View style={styles.settingInfo}>
             <Text style={styles.settingIcon}>🔒</Text>
             <View>
@@ -264,7 +346,10 @@ export default function SettingsScreen() {
           </View>
           <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.settingItem}>
+        <TouchableOpacity
+          style={styles.settingItem}
+          onPress={() => handleOpenLink('https://holycultureradio.com/guidelines', 'Community Guidelines')}
+        >
           <View style={styles.settingInfo}>
             <Text style={styles.settingIcon}>📋</Text>
             <View>
