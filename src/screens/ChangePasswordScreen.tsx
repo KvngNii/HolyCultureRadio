@@ -80,6 +80,8 @@ export default function ChangePasswordScreen() {
         password: newPassword,
       });
 
+      setIsLoading(false);
+
       if (error) {
         Alert.alert('Error', error.message);
         return;
@@ -91,9 +93,8 @@ export default function ChangePasswordScreen() {
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (error) {
-      Alert.alert('Error', 'Failed to change password. Please try again.');
-    } finally {
       setIsLoading(false);
+      Alert.alert('Error', 'Failed to change password. Please try again.');
     }
   };
 

@@ -49,6 +49,8 @@ export default function EditProfileScreen() {
         })
         .eq('id', user?.id);
 
+      setIsLoading(false);
+
       if (error) {
         if (error.code === '23505') {
           Alert.alert('Error', 'This username is already taken');
@@ -67,9 +69,8 @@ export default function EditProfileScreen() {
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (error) {
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
-    } finally {
       setIsLoading(false);
+      Alert.alert('Error', 'Failed to update profile. Please try again.');
     }
   };
 
