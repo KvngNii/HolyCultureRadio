@@ -3,7 +3,7 @@
  * App settings and preferences
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,8 +16,10 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { colors, typography, spacing } from '../theme';
+import { typography, spacing } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { useColors } from '../hooks/useColors';
 import { RootStackParamList } from '../types';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -25,11 +27,13 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export default function SettingsScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { user, logout } = useAuth();
+  const { isDarkMode, toggleTheme } = useTheme();
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [notifications, setNotifications] = useState(true);
   const [emailDigest, setEmailDigest] = useState(false);
   const [autoPlay, setAutoPlay] = useState(true);
   const [downloadOnWifi, setDownloadOnWifi] = useState(true);
-  const [darkMode, setDarkMode] = useState(true);
   const [audioQuality, setAudioQuality] = useState('High (320 kbps)');
 
   const showComingSoon = (feature: string) => {
@@ -245,8 +249,8 @@ export default function SettingsScreen() {
             </View>
           </View>
           <Switch
-            value={darkMode}
-            onValueChange={setDarkMode}
+            value={isDarkMode}
+            onValueChange={toggleTheme}
             trackColor={{ false: colors.border, true: colors.primary }}
             thumbColor={colors.textOnPrimary}
           />
@@ -399,7 +403,7 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
