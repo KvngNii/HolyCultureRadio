@@ -29,6 +29,8 @@ import ForumScreen from '../screens/ForumScreen';
 import ForumPostScreen from '../screens/ForumPostScreen';
 import CreatePostScreen from '../screens/CreatePostScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
+import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
 // Components
@@ -225,6 +227,20 @@ function MainNavigator() {
       <Stack.Screen
         name="Profile"
         component={ProfileScreen}
+        options={{
+          title: 'Profile',
+        }}
+      />
+      <Stack.Screen
+        name="EditProfile"
+        component={EditProfileScreen}
+        options={{
+          title: 'Edit Profile',
+        }}
+      />
+      <Stack.Screen
+        name="ChangePassword"
+        component={ChangePasswordScreen}
         options={{
           title: 'Profile',
         }}

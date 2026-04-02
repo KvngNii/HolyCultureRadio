@@ -18,6 +18,8 @@ export type RootStackParamList = {
   ForumPost: { postId: string };
   CreatePost: undefined;
   Profile: { userId: string };
+  EditProfile: undefined;
+  ChangePassword: undefined;
   Settings: undefined;
   SpotifyAuth: undefined;
   SpotifyPlayer: undefined;

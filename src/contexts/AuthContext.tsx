@@ -13,6 +13,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -61,6 +62,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { success: result.success, error: result.error };
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const currentUser = authService.getCurrentUser();
+    setUser(currentUser);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -70,6 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         register,
+        refreshUser,
       }}
     >
       {children}
