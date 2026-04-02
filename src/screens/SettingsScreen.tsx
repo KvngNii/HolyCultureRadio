@@ -14,10 +14,16 @@ import {
   Alert,
   Linking,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, typography, spacing } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
+import { RootStackParamList } from '../types';
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function SettingsScreen() {
+  const navigation = useNavigation<NavigationProp>();
   const { user, logout } = useAuth();
   const [notifications, setNotifications] = useState(true);
   const [emailDigest, setEmailDigest] = useState(false);
@@ -112,7 +118,7 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>Account</Text>
         <TouchableOpacity
           style={styles.settingItem}
-          onPress={() => showComingSoon('Edit Profile')}
+          onPress={() => navigation.navigate('EditProfile')}
         >
           <View style={styles.settingInfo}>
             <Text style={styles.settingIcon}>👤</Text>
@@ -125,7 +131,7 @@ export default function SettingsScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.settingItem}
-          onPress={() => showComingSoon('Change Password')}
+          onPress={() => navigation.navigate('ChangePassword')}
         >
           <View style={styles.settingInfo}>
             <Text style={styles.settingIcon}>🔐</Text>
