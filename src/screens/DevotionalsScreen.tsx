@@ -313,26 +313,26 @@ const createStyles = (colors: any) => StyleSheet.create({
   categoriesContent: {
     paddingHorizontal: spacing.screenPadding,
     paddingVertical: spacing.md,
+    flexDirection: 'row',
     alignItems: 'center',
   },
   categoryPill: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 20,
     backgroundColor: colors.backgroundSecondary,
     marginRight: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
-    minWidth: 50,
   },
   categoryPillActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
   categoryText: {
-    ...typography.label,
+    fontSize: 14,
+    fontWeight: '500',
     color: colors.textSecondary,
-    textAlign: 'center',
   },
   categoryTextActive: {
     color: colors.textOnPrimary,
