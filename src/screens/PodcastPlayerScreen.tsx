@@ -3,7 +3,7 @@
  * Full-screen podcast playback with controls
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,8 @@ import {
   Animated,
 } from 'react-native';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
-import { colors, typography, spacing, shadows } from '../theme';
+import { typography, spacing, shadows } from '../theme';
+import { useColors } from '../hooks/useColors';
 import { RootStackParamList } from '../types';
 import { usePlayer } from '../hooks/usePlayer';
 
@@ -39,6 +40,8 @@ export default function PodcastPlayerScreen() {
   const route = useRoute<PodcastPlayerRouteProp>();
   const navigation = useNavigation();
   const { playerState, play, togglePlayPause, seek } = usePlayer();
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -254,7 +257,7 @@ export default function PodcastPlayerScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

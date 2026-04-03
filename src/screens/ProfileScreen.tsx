@@ -3,7 +3,7 @@
  * User profile view
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,8 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
-import { colors, typography, spacing } from '../theme';
+import { typography, spacing } from '../theme';
+import { useColors } from '../hooks/useColors';
 import { RootStackParamList } from '../types';
 
 type ProfileRouteProp = RouteProp<RootStackParamList, 'Profile'>;
@@ -44,6 +45,8 @@ const mockActivity = [
 export default function ProfileScreen() {
   const route = useRoute<ProfileRouteProp>();
   const navigation = useNavigation();
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const formatDate = (date: Date): string => {
     return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -148,7 +151,7 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

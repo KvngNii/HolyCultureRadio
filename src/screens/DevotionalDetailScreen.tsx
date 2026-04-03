@@ -3,7 +3,7 @@
  * Full devotional view with comments
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,8 @@ import {
   Platform,
 } from 'react-native';
 import { RouteProp, useRoute } from '@react-navigation/native';
-import { colors, typography, spacing } from '../theme';
+import { typography, spacing } from '../theme';
+import { useColors } from '../hooks/useColors';
 import { RootStackParamList, DevotionalComment } from '../types';
 
 type DevotionalDetailRouteProp = RouteProp<RootStackParamList, 'DevotionalDetail'>;
@@ -110,6 +111,8 @@ const mockComments: DevotionalComment[] = [
 
 export default function DevotionalDetailScreen() {
   const route = useRoute<DevotionalDetailRouteProp>();
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [isLiked, setIsLiked] = useState(mockDevotional.isLiked);
   const [isSaved, setIsSaved] = useState(mockDevotional.isSaved);
   const [likes, setLikes] = useState(mockDevotional.likes);
@@ -316,7 +319,7 @@ function formatTimeAgo(date: Date): string {
   return date.toLocaleDateString();
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

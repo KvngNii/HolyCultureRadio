@@ -3,7 +3,7 @@
  * Allows users to write and submit their own devotionals
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,12 +16,15 @@ import {
   Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { colors, typography, spacing } from '../theme';
+import { typography, spacing } from '../theme';
+import { useColors } from '../hooks/useColors';
 
 const tagOptions = ['Peace', 'Faith', 'Love', 'Hope', 'Prayer', 'Worship', 'Gratitude', 'Strength'];
 
 export default function CreateDevotionalScreen() {
   const navigation = useNavigation();
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [scripture, setScripture] = useState('');
@@ -194,7 +197,7 @@ export default function CreateDevotionalScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

@@ -3,7 +3,7 @@
  * Create new forum posts
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,8 @@ import {
   Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { colors, typography, spacing } from '../theme';
+import { typography, spacing } from '../theme';
+import { useColors } from '../hooks/useColors';
 import { ForumCategory } from '../types';
 
 // Mock categories
@@ -36,6 +37,8 @@ const suggestedTags = [
 
 export default function CreatePostScreen() {
   const navigation = useNavigation();
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -208,7 +211,7 @@ export default function CreatePostScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

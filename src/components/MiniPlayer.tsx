@@ -3,7 +3,7 @@
  * Displays at the bottom of screens when audio is playing
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,13 @@ import {
   Image,
   Animated,
 } from 'react-native';
-import { colors, typography, spacing } from '../theme';
+import { typography, spacing } from '../theme';
+import { useColors } from '../hooks/useColors';
 import { usePlayer } from '../hooks/usePlayer';
 
 export default function MiniPlayer() {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { playerState, togglePlayPause, isVisible } = usePlayer();
 
   if (!isVisible || !playerState.currentTrack) {
@@ -95,7 +98,7 @@ export default function MiniPlayer() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     position: 'absolute',
     bottom: 88, // Above tab bar

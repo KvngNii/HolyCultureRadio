@@ -3,7 +3,7 @@
  * Daily devotionals from community members
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,8 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { colors, typography, spacing } from '../theme';
+import { typography, spacing } from '../theme';
+import { useColors } from '../hooks/useColors';
 import { RootStackParamList, Devotional } from '../types';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -120,6 +121,8 @@ const categories = ['All', 'Peace', 'Faith', 'Love', 'Hope', 'Prayer', 'Worship'
 
 export default function DevotionalsScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
   const [devotionals, setDevotionals] = useState(mockDevotionals);
@@ -297,7 +300,7 @@ function formatDate(date: Date): string {
   return date.toLocaleDateString();
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -485,3 +488,4 @@ const styles = StyleSheet.create({
     fontSize: 24,
   },
 });
+

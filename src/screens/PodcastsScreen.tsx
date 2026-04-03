@@ -3,7 +3,7 @@
  * Browse and listen to Holy Culture podcasts
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,8 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { colors, typography, spacing, shadows } from '../theme';
+import { typography, spacing, shadows } from '../theme';
+import { useColors } from '../hooks/useColors';
 import { RootStackParamList, Podcast, PodcastEpisode } from '../types';
 
 const { width } = Dimensions.get('window');
@@ -128,6 +129,8 @@ const mockEpisodes: PodcastEpisode[] = [
 export default function PodcastsScreen() {
   const navigation = useNavigation<NavigationProp>();
   const [selectedTab, setSelectedTab] = useState<'discover' | 'subscribed'>('discover');
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const subscribedPodcasts = mockPodcasts.filter(p => p.isSubscribed);
 
@@ -163,7 +166,7 @@ export default function PodcastsScreen() {
       <Text style={styles.podcastTitle} numberOfLines={2}>{item.title}</Text>
       <Text style={styles.podcastHost} numberOfLines={1}>{item.host}</Text>
       <View style={styles.podcastMeta}>
-        <View style={[styles.categoryBadge, { backgroundColor: getCategoryColor(item.category) }]}>
+        <View style={[styles.categoryBadge, { backgroundColor: getCategoryColor(item.category, colors.primary) }]}>
           <Text style={styles.categoryText}>{item.category}</Text>
         </View>
       </View>
@@ -254,7 +257,7 @@ export default function PodcastsScreen() {
               {['Discussion', 'Music', 'Youth', 'Prayer', 'Teaching', 'Testimony'].map((category) => (
                 <TouchableOpacity
                   key={category}
-                  style={[styles.categoryCard, { backgroundColor: getCategoryColor(category) }]}
+                  style={[styles.categoryCard, { backgroundColor: getCategoryColor(category, colors.primary) }]}
                 >
                   <Text style={styles.categoryCardText}>{category}</Text>
                 </TouchableOpacity>
@@ -343,7 +346,7 @@ export default function PodcastsScreen() {
   );
 }
 
-function getCategoryColor(category: string): string {
+function getCategoryColor(category: string, primaryColor: string): string {
   const categoryColors: Record<string, string> = {
     Discussion: '#C41E3A',
     Music: '#8B0000',
@@ -352,10 +355,10 @@ function getCategoryColor(category: string): string {
     Teaching: '#006400',
     Testimony: '#FF8C00',
   };
-  return categoryColors[category] || colors.primary;
+  return categoryColors[category] || primaryColor;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

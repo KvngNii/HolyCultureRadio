@@ -3,7 +3,7 @@
  * Live radio streaming from SiriusXM
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,8 @@ import {
   Linking,
   Alert,
 } from 'react-native';
-import { colors, typography, spacing, shadows } from '../theme';
+import { typography, spacing, shadows } from '../theme';
+import { useColors } from '../hooks/useColors';
 import { usePlayer } from '../hooks/usePlayer';
 import { Show, ShowSchedule } from '../types';
 import SiriusXMPlayer from '../components/SiriusXMPlayer';
@@ -61,6 +62,8 @@ const currentShow: Show = {
 };
 
 export default function RadioScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const { playerState, playRadio, togglePlayPause, stop } = usePlayer();
   const [isLive, setIsLive] = useState(true);
   const [pulseAnim] = useState(new Animated.Value(1));
@@ -279,7 +282,7 @@ export default function RadioScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
