@@ -3,7 +3,7 @@
  * Daily devotionals from community members
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,127 +12,126 @@ import {
   TouchableOpacity,
   FlatList,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { typography, spacing } from '../theme';
 import { useColors } from '../hooks/useColors';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import { RootStackParamList, Devotional } from '../types';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-// Mock devotionals data
-const mockDevotionals: Devotional[] = [
-  {
-    id: '1',
-    title: 'Finding Peace in the Storm',
-    content: 'In times of trouble, we often forget that God is our refuge and strength. Today\'s devotional reminds us that even in the midst of life\'s storms, we can find peace in His presence.',
-    scripture: 'Be still, and know that I am God; I will be exalted among the nations, I will be exalted in the earth.',
-    scriptureReference: 'Psalm 46:10',
-    author: {
-      id: '1',
-      username: 'PastorMichael',
-      email: 'pastor@holycultureradio.com',
-      avatar: '',
-      bio: 'Senior Pastor',
-      createdAt: new Date(),
-      isVerified: true,
-      role: 'admin',
-    },
-    createdAt: new Date(),
-    likes: 245,
-    comments: 32,
-    isLiked: false,
-    isSaved: false,
-    tags: ['peace', 'faith', 'trust'],
-  },
-  {
-    id: '2',
-    title: 'Walking in Faith',
-    content: 'Faith is not about seeing the whole staircase, but taking the first step. Abraham didn\'t know where he was going, but he trusted God\'s guidance.',
-    scripture: 'Now faith is confidence in what we hope for and assurance about what we do not see.',
-    scriptureReference: 'Hebrews 11:1',
-    author: {
-      id: '2',
-      username: 'SisterGrace',
-      email: 'grace@holycultureradio.com',
-      avatar: '',
-      bio: 'Worship Leader',
-      createdAt: new Date(),
-      isVerified: true,
-      role: 'moderator',
-    },
-    createdAt: new Date(Date.now() - 86400000),
-    likes: 189,
-    comments: 24,
-    isLiked: true,
-    isSaved: true,
-    tags: ['faith', 'trust', 'journey'],
-  },
-  {
-    id: '3',
-    title: 'The Power of Gratitude',
-    content: 'A grateful heart is a magnet for miracles. When we focus on what we have instead of what we lack, we open ourselves to God\'s abundant blessings.',
-    scripture: 'Give thanks in all circumstances; for this is God\'s will for you in Christ Jesus.',
-    scriptureReference: '1 Thessalonians 5:18',
-    author: {
-      id: '3',
-      username: 'BrotherDavid',
-      email: 'david@holycultureradio.com',
-      avatar: '',
-      bio: 'Community Member',
-      createdAt: new Date(),
-      isVerified: false,
-      role: 'member',
-    },
-    createdAt: new Date(Date.now() - 172800000),
-    likes: 156,
-    comments: 18,
-    isLiked: false,
-    isSaved: false,
-    tags: ['gratitude', 'blessings', 'thanksgiving'],
-  },
-  {
-    id: '4',
-    title: 'Strength in Weakness',
-    content: 'Our weaknesses are opportunities for God\'s strength to shine through. When we acknowledge our limitations, we make room for His power.',
-    scripture: 'But he said to me, "My grace is sufficient for you, for my power is made perfect in weakness."',
-    scriptureReference: '2 Corinthians 12:9',
-    author: {
-      id: '1',
-      username: 'PastorMichael',
-      email: 'pastor@holycultureradio.com',
-      avatar: '',
-      bio: 'Senior Pastor',
-      createdAt: new Date(),
-      isVerified: true,
-      role: 'admin',
-    },
-    createdAt: new Date(Date.now() - 259200000),
-    likes: 312,
-    comments: 45,
-    isLiked: true,
-    isSaved: false,
-    tags: ['strength', 'grace', 'weakness'],
-  },
-];
-
-const categories = ['All', 'Peace', 'Faith', 'Love', 'Hope', 'Prayer', 'Worship'];
+const categories = ['All', 'Peace', 'Faith', 'Love', 'Hope', 'Prayer', 'Worship', 'Gratitude', 'Strength'];
 
 export default function DevotionalsScreen() {
   const navigation = useNavigation<NavigationProp>();
   const colors = useColors();
+  const { user } = useAuth();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
-  const [devotionals, setDevotionals] = useState(mockDevotionals);
+  const [loading, setLoading] = useState(true);
+  const [devotionals, setDevotionals] = useState<Devotional[]>([]);
+
+  const fetchDevotionals = useCallback(async () => {
+    try {
+      let query = supabase
+        .from('devotionals')
+        .select(`
+          id,
+          title,
+          content,
+          scripture,
+          scripture_reference,
+          tags,
+          likes_count,
+          comments_count,
+          created_at,
+          author:profiles!author_id (
+            id,
+            username,
+            email,
+            avatar_url,
+            bio,
+            is_verified,
+            role,
+            created_at
+          )
+        `)
+        .eq('is_published', true)
+        .order('created_at', { ascending: false });
+
+      // Filter by category/tag if not "All"
+      if (selectedCategory !== 'All') {
+        query = query.contains('tags', [selectedCategory.toLowerCase()]);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      // Transform data to match Devotional type
+      const transformedData: Devotional[] = (data || []).map((item: any) => ({
+        id: item.id,
+        title: item.title,
+        content: item.content,
+        scripture: item.scripture,
+        scriptureReference: item.scripture_reference,
+        tags: item.tags || [],
+        likes: item.likes_count || 0,
+        comments: item.comments_count || 0,
+        createdAt: new Date(item.created_at),
+        isLiked: false, // TODO: Check user's likes
+        isSaved: false, // TODO: Check user's saves
+        author: item.author ? {
+          id: item.author.id,
+          username: item.author.username,
+          email: item.author.email,
+          avatar: item.author.avatar_url || '',
+          bio: item.author.bio || '',
+          isVerified: item.author.is_verified || false,
+          role: item.author.role || 'member',
+          createdAt: new Date(item.author.created_at),
+        } : {
+          id: 'unknown',
+          username: 'Anonymous',
+          email: '',
+          avatar: '',
+          bio: '',
+          isVerified: false,
+          role: 'member',
+          createdAt: new Date(),
+        },
+      }));
+
+      setDevotionals(transformedData);
+    } catch (error) {
+      console.error('Error fetching devotionals:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [selectedCategory]);
+
+  // Fetch on mount and when category changes
+  useEffect(() => {
+    setLoading(true);
+    fetchDevotionals();
+  }, [fetchDevotionals]);
+
+  // Refresh when screen comes into focus (e.g., after submitting a new devotional)
+  useFocusEffect(
+    useCallback(() => {
+      fetchDevotionals();
+    }, [fetchDevotionals])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
-    // Simulate API call
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1500);
+    fetchDevotionals();
   };
 
   const toggleLike = (id: string) => {
@@ -230,6 +229,24 @@ export default function DevotionalsScreen() {
     </TouchableOpacity>
   );
 
+  const renderEmptyList = () => (
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyIcon}>📖</Text>
+      <Text style={styles.emptyTitle}>No Devotionals Yet</Text>
+      <Text style={styles.emptyText}>
+        {selectedCategory === 'All'
+          ? 'Be the first to share a devotional with the community!'
+          : `No devotionals found with the "${selectedCategory}" tag.`}
+      </Text>
+      <TouchableOpacity
+        style={styles.emptyButton}
+        onPress={() => navigation.navigate('CreateDevotional')}
+      >
+        <Text style={styles.emptyButtonText}>Write a Devotional</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       {/* Categories */}
@@ -260,23 +277,35 @@ export default function DevotionalsScreen() {
         ))}
       </ScrollView>
 
-      {/* Devotionals List */}
-      <FlatList
-        data={devotionals}
-        renderItem={renderDevotional}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-            colors={[colors.primary]}
-          />
-        }
-        ListFooterComponent={<View style={styles.listFooter} />}
-      />
+      {/* Loading State */}
+      {loading && devotionals.length === 0 ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading devotionals...</Text>
+        </View>
+      ) : (
+        /* Devotionals List */
+        <FlatList
+          data={devotionals}
+          renderItem={renderDevotional}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[
+            styles.listContent,
+            devotionals.length === 0 && styles.emptyListContent,
+          ]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+          ListEmptyComponent={renderEmptyList}
+          ListFooterComponent={devotionals.length > 0 ? <View style={styles.listFooter} /> : null}
+        />
+      )}
 
       {/* Submit Devotional FAB */}
       <TouchableOpacity
@@ -344,6 +373,52 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   listContent: {
     padding: spacing.screenPadding,
+  },
+  emptyListContent: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    ...typography.body,
+    color: colors.textMuted,
+    marginTop: spacing.md,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: spacing.lg,
+  },
+  emptyTitle: {
+    ...typography.h3,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  emptyText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+  },
+  emptyButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: spacing.sm,
+  },
+  emptyButtonText: {
+    ...typography.body,
+    color: colors.textOnPrimary,
+    fontWeight: '600',
   },
   devotionalCard: {
     backgroundColor: colors.backgroundSecondary,
