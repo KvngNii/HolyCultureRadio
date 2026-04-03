@@ -3,7 +3,7 @@
  * Full devotional view with comments
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,143 +13,244 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { typography, spacing } from '../theme';
 import { useColors } from '../hooks/useColors';
-import { RootStackParamList, DevotionalComment } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+import { RootStackParamList, DevotionalComment, Devotional } from '../types';
 
 type DevotionalDetailRouteProp = RouteProp<RootStackParamList, 'DevotionalDetail'>;
 
-// Mock data
-const mockDevotional = {
-  id: '1',
-  title: 'Finding Peace in the Storm',
-  content: `In times of trouble, we often forget that God is our refuge and strength. Today's devotional reminds us that even in the midst of life's storms, we can find peace in His presence.
-
-Life throws many challenges our way - health concerns, relationship struggles, financial pressures, and uncertainty about the future. During these times, it's natural to feel anxious, worried, or even afraid. But God's Word reminds us that we don't have to face these storms alone.
-
-The psalmist writes, "God is our refuge and strength, an ever-present help in trouble." This isn't just a nice sentiment - it's a powerful truth we can lean on when everything around us feels unstable.
-
-When Jesus was in the boat with His disciples during a violent storm, He was peacefully sleeping. The disciples were terrified, but Jesus spoke to the wind and waves, "Peace, be still." And there was complete calm.
-
-The same Jesus who calmed the Sea of Galilee wants to calm the storms in your life. He may not always remove the storm, but He will give you peace in the midst of it.
-
-Today, whatever storm you're facing, remember:
-• God is with you - He will never leave you nor forsake you
-• God is for you - He works all things for your good
-• God is stronger than your storm - nothing is impossible for Him
-
-Take a moment to be still before God. Acknowledge His presence. Trust in His power. And receive His peace.`,
-  scripture: 'Be still, and know that I am God; I will be exalted among the nations, I will be exalted in the earth.',
-  scriptureReference: 'Psalm 46:10',
-  author: {
-    id: '1',
-    username: 'PastorMichael',
-    email: 'pastor@holycultureradio.com',
-    avatar: '',
-    bio: 'Senior Pastor at Grace Community Church. Passionate about sharing God\'s love through music and the Word.',
-    createdAt: new Date(),
-    isVerified: true,
-    role: 'admin' as const,
-  },
-  createdAt: new Date(),
-  likes: 245,
-  comments: 32,
-  isLiked: false,
-  isSaved: false,
-  tags: ['peace', 'faith', 'trust'],
-};
-
-const mockComments: DevotionalComment[] = [
-  {
-    id: '1',
-    devotionalId: '1',
-    author: {
-      id: '2',
-      username: 'SisterGrace',
-      email: 'grace@example.com',
-      createdAt: new Date(),
-      isVerified: true,
-      role: 'member',
-    },
-    content: 'This is exactly what I needed to hear today. Going through a difficult season and this reminded me to trust God\'s timing. Amen! 🙏',
-    createdAt: new Date(Date.now() - 3600000),
-    likes: 12,
-  },
-  {
-    id: '2',
-    devotionalId: '1',
-    author: {
-      id: '3',
-      username: 'BrotherDavid',
-      email: 'david@example.com',
-      createdAt: new Date(),
-      isVerified: false,
-      role: 'member',
-    },
-    content: 'Psalm 46:10 has been my go-to verse this year. So grateful for this devotional!',
-    createdAt: new Date(Date.now() - 7200000),
-    likes: 8,
-  },
-  {
-    id: '3',
-    devotionalId: '1',
-    author: {
-      id: '4',
-      username: 'JoyfulMary',
-      email: 'mary@example.com',
-      createdAt: new Date(),
-      isVerified: false,
-      role: 'member',
-    },
-    content: 'The reminder that God is with us, for us, and stronger than our storms is so powerful. Thank you Pastor Michael!',
-    createdAt: new Date(Date.now() - 14400000),
-    likes: 15,
-  },
-];
-
 export default function DevotionalDetailScreen() {
   const route = useRoute<DevotionalDetailRouteProp>();
+  const { devotionalId } = route.params;
   const colors = useColors();
+  const { user } = useAuth();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const [isLiked, setIsLiked] = useState(mockDevotional.isLiked);
-  const [isSaved, setIsSaved] = useState(mockDevotional.isSaved);
-  const [likes, setLikes] = useState(mockDevotional.likes);
+
+  const [devotional, setDevotional] = useState<Devotional | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isLiked, setIsLiked] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [likes, setLikes] = useState(0);
   const [commentText, setCommentText] = useState('');
-  const [comments, setComments] = useState(mockComments);
+  const [comments, setComments] = useState<DevotionalComment[]>([]);
+
+  const fetchDevotional = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Fetch devotional with author info
+      const { data, error: fetchError } = await supabase
+        .from('devotionals')
+        .select(`
+          id,
+          title,
+          content,
+          scripture,
+          scripture_reference,
+          tags,
+          likes_count,
+          comments_count,
+          created_at,
+          author:profiles!author_id (
+            id,
+            username,
+            email,
+            avatar_url,
+            bio,
+            is_verified,
+            role,
+            created_at
+          )
+        `)
+        .eq('id', devotionalId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      if (data) {
+        const transformedDevotional: Devotional = {
+          id: data.id,
+          title: data.title,
+          content: data.content,
+          scripture: data.scripture,
+          scriptureReference: data.scripture_reference,
+          tags: data.tags || [],
+          likes: data.likes_count || 0,
+          comments: data.comments_count || 0,
+          createdAt: new Date(data.created_at),
+          isLiked: false,
+          isSaved: false,
+          author: data.author ? {
+            id: data.author.id,
+            username: data.author.username,
+            email: data.author.email,
+            avatar: data.author.avatar_url || '',
+            bio: data.author.bio || '',
+            isVerified: data.author.is_verified || false,
+            role: data.author.role || 'member',
+            createdAt: new Date(data.author.created_at),
+          } : {
+            id: 'unknown',
+            username: 'Anonymous',
+            email: '',
+            avatar: '',
+            bio: '',
+            isVerified: false,
+            role: 'member',
+            createdAt: new Date(),
+          },
+        };
+
+        setDevotional(transformedDevotional);
+        setLikes(transformedDevotional.likes);
+      }
+
+      // Fetch comments
+      const { data: commentsData } = await supabase
+        .from('devotional_comments')
+        .select(`
+          id,
+          content,
+          likes_count,
+          created_at,
+          author:profiles!author_id (
+            id,
+            username,
+            email,
+            avatar_url,
+            is_verified,
+            role,
+            created_at
+          )
+        `)
+        .eq('devotional_id', devotionalId)
+        .order('created_at', { ascending: false });
+
+      if (commentsData) {
+        const transformedComments: DevotionalComment[] = commentsData.map((c: any) => ({
+          id: c.id,
+          devotionalId: devotionalId,
+          content: c.content,
+          likes: c.likes_count || 0,
+          createdAt: new Date(c.created_at),
+          author: c.author ? {
+            id: c.author.id,
+            username: c.author.username,
+            email: c.author.email,
+            avatar: c.author.avatar_url || '',
+            isVerified: c.author.is_verified || false,
+            role: c.author.role || 'member',
+            createdAt: new Date(c.author.created_at),
+          } : {
+            id: 'unknown',
+            username: 'Anonymous',
+            email: '',
+            avatar: '',
+            isVerified: false,
+            role: 'member',
+            createdAt: new Date(),
+          },
+        }));
+        setComments(transformedComments);
+      }
+
+    } catch (err: any) {
+      console.error('Error fetching devotional:', err);
+      setError(err.message || 'Failed to load devotional');
+    } finally {
+      setLoading(false);
+    }
+  }, [devotionalId]);
+
+  useEffect(() => {
+    fetchDevotional();
+  }, [fetchDevotional]);
 
   const handleLike = () => {
     setIsLiked(!isLiked);
     setLikes(prev => isLiked ? prev - 1 : prev + 1);
+    // TODO: Update likes in Supabase
   };
 
   const handleSave = () => {
     setIsSaved(!isSaved);
+    // TODO: Update saves in Supabase
   };
 
-  const handleSubmitComment = () => {
-    if (!commentText.trim()) return;
+  const handleSubmitComment = async () => {
+    if (!commentText.trim() || !user) return;
 
-    const newComment: DevotionalComment = {
-      id: String(Date.now()),
-      devotionalId: mockDevotional.id,
-      author: {
-        id: 'current-user',
-        username: 'You',
-        email: 'user@example.com',
-        createdAt: new Date(),
-        isVerified: false,
-        role: 'member',
-      },
-      content: commentText.trim(),
-      createdAt: new Date(),
-      likes: 0,
-    };
+    try {
+      const { data, error } = await supabase
+        .from('devotional_comments')
+        .insert({
+          devotional_id: devotionalId,
+          author_id: user.id,
+          content: commentText.trim(),
+        })
+        .select(`
+          id,
+          content,
+          likes_count,
+          created_at
+        `)
+        .single();
 
-    setComments([newComment, ...comments]);
-    setCommentText('');
+      if (error) throw error;
+
+      // Add the new comment to the list
+      const newComment: DevotionalComment = {
+        id: data.id,
+        devotionalId: devotionalId,
+        author: {
+          id: user.id,
+          username: user.email?.split('@')[0] || 'You',
+          email: user.email || '',
+          avatar: '',
+          isVerified: false,
+          role: 'member',
+          createdAt: new Date(),
+        },
+        content: data.content,
+        createdAt: new Date(data.created_at),
+        likes: 0,
+      };
+
+      setComments([newComment, ...comments]);
+      setCommentText('');
+    } catch (err) {
+      console.error('Error posting comment:', err);
+    }
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading devotional...</Text>
+      </View>
+    );
+  }
+
+  if (error || !devotional) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <Text style={styles.errorIcon}>😔</Text>
+        <Text style={styles.errorTitle}>Could not load devotional</Text>
+        <Text style={styles.errorText}>{error || 'Devotional not found'}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchDevotional}>
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -162,26 +263,26 @@ export default function DevotionalDetailScreen() {
         <View style={styles.authorSection}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>
-              {mockDevotional.author.username.charAt(0).toUpperCase()}
+              {devotional.author.username.charAt(0).toUpperCase()}
             </Text>
           </View>
           <View style={styles.authorInfo}>
             <View style={styles.authorNameRow}>
-              <Text style={styles.authorName}>{mockDevotional.author.username}</Text>
-              {mockDevotional.author.isVerified && (
+              <Text style={styles.authorName}>{devotional.author.username}</Text>
+              {devotional.author.isVerified && (
                 <Text style={styles.verifiedBadge}>✓</Text>
               )}
             </View>
             <Text style={styles.authorBio} numberOfLines={2}>
-              {mockDevotional.author.bio}
+              {devotional.author.bio || 'Community Member'}
             </Text>
           </View>
         </View>
 
         {/* Title */}
-        <Text style={styles.title}>{mockDevotional.title}</Text>
+        <Text style={styles.title}>{devotional.title}</Text>
         <Text style={styles.date}>
-          {mockDevotional.createdAt.toLocaleDateString('en-US', {
+          {devotional.createdAt.toLocaleDateString('en-US', {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
@@ -191,21 +292,23 @@ export default function DevotionalDetailScreen() {
 
         {/* Scripture */}
         <View style={styles.scriptureBox}>
-          <Text style={styles.scriptureText}>"{mockDevotional.scripture}"</Text>
-          <Text style={styles.scriptureReference}>{mockDevotional.scriptureReference}</Text>
+          <Text style={styles.scriptureText}>"{devotional.scripture}"</Text>
+          <Text style={styles.scriptureReference}>{devotional.scriptureReference}</Text>
         </View>
 
         {/* Content */}
-        <Text style={styles.content}>{mockDevotional.content}</Text>
+        <Text style={styles.content}>{devotional.content}</Text>
 
         {/* Tags */}
-        <View style={styles.tagsContainer}>
-          {mockDevotional.tags.map((tag) => (
-            <View key={tag} style={styles.tag}>
-              <Text style={styles.tagText}>#{tag}</Text>
-            </View>
-          ))}
-        </View>
+        {devotional.tags.length > 0 && (
+          <View style={styles.tagsContainer}>
+            {devotional.tags.map((tag) => (
+              <View key={tag} style={styles.tag}>
+                <Text style={styles.tagText}>#{tag}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Actions */}
         <View style={styles.actionsBar}>
@@ -234,47 +337,43 @@ export default function DevotionalDetailScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Prayer Section */}
-        <View style={styles.prayerSection}>
-          <Text style={styles.prayerTitle}>🙏 Prayer</Text>
-          <Text style={styles.prayerText}>
-            Lord, help me to be still in Your presence today. When the storms of life rage around me,
-            remind me that You are my refuge and strength. Give me Your peace that surpasses all
-            understanding. In Jesus' name, Amen.
-          </Text>
-        </View>
-
         {/* Comments Section */}
         <View style={styles.commentsSection}>
           <Text style={styles.commentsTitle}>Comments ({comments.length})</Text>
 
-          {comments.map((comment) => (
-            <View key={comment.id} style={styles.commentCard}>
-              <View style={styles.commentHeader}>
-                <View style={styles.commentAvatar}>
-                  <Text style={styles.commentAvatarText}>
-                    {comment.author.username.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={styles.commentMeta}>
-                  <View style={styles.commentAuthorRow}>
-                    <Text style={styles.commentAuthor}>{comment.author.username}</Text>
-                    {comment.author.isVerified && (
-                      <Text style={styles.verifiedBadge}>✓</Text>
-                    )}
-                  </View>
-                  <Text style={styles.commentTime}>
-                    {formatTimeAgo(comment.createdAt)}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.commentContent}>{comment.content}</Text>
-              <TouchableOpacity style={styles.commentLike}>
-                <Text style={styles.commentLikeIcon}>🤍</Text>
-                <Text style={styles.commentLikeCount}>{comment.likes}</Text>
-              </TouchableOpacity>
+          {comments.length === 0 ? (
+            <View style={styles.noComments}>
+              <Text style={styles.noCommentsText}>No comments yet. Be the first to share your thoughts!</Text>
             </View>
-          ))}
+          ) : (
+            comments.map((comment) => (
+              <View key={comment.id} style={styles.commentCard}>
+                <View style={styles.commentHeader}>
+                  <View style={styles.commentAvatar}>
+                    <Text style={styles.commentAvatarText}>
+                      {comment.author.username.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.commentMeta}>
+                    <View style={styles.commentAuthorRow}>
+                      <Text style={styles.commentAuthor}>{comment.author.username}</Text>
+                      {comment.author.isVerified && (
+                        <Text style={styles.verifiedBadge}>✓</Text>
+                      )}
+                    </View>
+                    <Text style={styles.commentTime}>
+                      {formatTimeAgo(comment.createdAt)}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.commentContent}>{comment.content}</Text>
+                <TouchableOpacity style={styles.commentLike}>
+                  <Text style={styles.commentLikeIcon}>🤍</Text>
+                  <Text style={styles.commentLikeCount}>{comment.likes}</Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
         </View>
 
         <View style={styles.bottomSpacing} />
@@ -323,6 +422,42 @@ const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  loadingText: {
+    ...typography.body,
+    color: colors.textMuted,
+    marginTop: spacing.md,
+  },
+  errorIcon: {
+    fontSize: 64,
+    marginBottom: spacing.md,
+  },
+  errorTitle: {
+    ...typography.h4,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  errorText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: spacing.sm,
+  },
+  retryButtonText: {
+    ...typography.body,
+    color: colors.textOnPrimary,
+    fontWeight: '600',
   },
   scrollView: {
     flex: 1,
@@ -483,6 +618,17 @@ const createStyles = (colors: any) => StyleSheet.create({
     ...typography.h4,
     color: colors.textPrimary,
     marginBottom: spacing.md,
+  },
+  noComments: {
+    backgroundColor: colors.backgroundSecondary,
+    borderRadius: spacing.cardBorderRadius,
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  noCommentsText: {
+    ...typography.body,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   commentCard: {
     backgroundColor: colors.backgroundSecondary,
