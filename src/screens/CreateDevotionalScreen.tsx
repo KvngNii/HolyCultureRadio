@@ -18,12 +18,15 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { typography, spacing } from '../theme';
 import { useColors } from '../hooks/useColors';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 const tagOptions = ['Peace', 'Faith', 'Love', 'Hope', 'Prayer', 'Worship', 'Gratitude', 'Strength'];
 
 export default function CreateDevotionalScreen() {
   const navigation = useNavigation();
   const colors = useColors();
+  const { user } = useAuth();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -68,19 +71,32 @@ export default function CreateDevotionalScreen() {
     setIsSubmitting(true);
 
     try {
-      // TODO: Submit to Supabase
-      // For now, simulate submission
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Submit to Supabase
+      const { error } = await supabase
+        .from('devotionals')
+        .insert({
+          author_id: user?.id,
+          title: title.trim(),
+          content: content.trim(),
+          scripture: scripture.trim(),
+          scripture_reference: scriptureReference.trim(),
+          tags: selectedTags.map(tag => tag.toLowerCase()),
+          is_published: false, // Requires admin review
+        });
 
+      if (error) {
+        throw error;
+      }
+
+      setIsSubmitting(false);
       Alert.alert(
         'Devotional Submitted',
         'Your devotional has been submitted for review. Thank you for sharing!',
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to submit devotional. Please try again.');
-    } finally {
+    } catch (error: any) {
       setIsSubmitting(false);
+      Alert.alert('Error', error.message || 'Failed to submit devotional. Please try again.');
     }
   };
 
