@@ -3,27 +3,26 @@
  * Main dashboard with quick access to all features
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   Dimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { colors, typography, spacing, shadows } from '../theme';
-import { RootStackParamList, BottomTabParamList } from '../types';
+import { typography, spacing, shadows } from '../theme';
+import { useColors } from '../hooks/useColors';
+import { RootStackParamList } from '../types';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - spacing.screenPadding * 2 - spacing.md) / 2;
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-// Mock data for featured content
 const featuredDevotional = {
   id: '1',
   title: 'Finding Peace in the Storm',
@@ -38,10 +37,11 @@ const recentPodcasts = [
 
 export default function HomeScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Hero Section - Live Radio */}
       <TouchableOpacity
         style={styles.heroCard}
         onPress={() => navigation.navigate('Main', { screen: 'Radio' } as any)}
@@ -60,38 +60,32 @@ export default function HomeScreen() {
         </View>
       </TouchableOpacity>
 
-      {/* Quick Access Grid */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Quick Access</Text>
         <View style={styles.quickAccessGrid}>
-          <QuickAccessCard
-            title="Devotionals"
-            subtitle="Daily inspiration"
-            icon="📖"
-            onPress={() => navigation.navigate('Main', { screen: 'Devotionals' } as any)}
-          />
-          <QuickAccessCard
-            title="Podcasts"
-            subtitle="Latest episodes"
-            icon="🎙️"
-            onPress={() => navigation.navigate('Main', { screen: 'Podcasts' } as any)}
-          />
-          <QuickAccessCard
-            title="Music"
-            subtitle="Stream via Spotify"
-            icon="🎵"
-            onPress={() => navigation.navigate('Main', { screen: 'Music' } as any)}
-          />
-          <QuickAccessCard
-            title="Community"
-            subtitle="Join the discussion"
-            icon="💬"
-            onPress={() => navigation.navigate('Main', { screen: 'Forum' } as any)}
-          />
+          <TouchableOpacity style={styles.quickAccessCard} onPress={() => navigation.navigate('Main', { screen: 'Devotionals' } as any)} activeOpacity={0.8}>
+            <Text style={styles.quickAccessIcon}>📖</Text>
+            <Text style={styles.quickAccessTitle}>Devotionals</Text>
+            <Text style={styles.quickAccessSubtitle}>Daily inspiration</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickAccessCard} onPress={() => navigation.navigate('Main', { screen: 'Podcasts' } as any)} activeOpacity={0.8}>
+            <Text style={styles.quickAccessIcon}>🎙️</Text>
+            <Text style={styles.quickAccessTitle}>Podcasts</Text>
+            <Text style={styles.quickAccessSubtitle}>Latest episodes</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickAccessCard} onPress={() => navigation.navigate('Main', { screen: 'Music' } as any)} activeOpacity={0.8}>
+            <Text style={styles.quickAccessIcon}>🎵</Text>
+            <Text style={styles.quickAccessTitle}>Music</Text>
+            <Text style={styles.quickAccessSubtitle}>Stream via Spotify</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickAccessCard} onPress={() => navigation.navigate('Main', { screen: 'Forum' } as any)} activeOpacity={0.8}>
+            <Text style={styles.quickAccessIcon}>💬</Text>
+            <Text style={styles.quickAccessTitle}>Community</Text>
+            <Text style={styles.quickAccessSubtitle}>Join the discussion</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* Featured Devotional */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Today's Devotional</Text>
@@ -117,7 +111,6 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Recent Podcasts */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Podcasts</Text>
@@ -146,7 +139,6 @@ export default function HomeScreen() {
         ))}
       </View>
 
-      {/* Community Highlight */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Community Highlights</Text>
         <TouchableOpacity
@@ -175,30 +167,12 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Bottom Spacing */}
       <View style={styles.bottomSpacing} />
     </ScrollView>
   );
 }
 
-interface QuickAccessCardProps {
-  title: string;
-  subtitle: string;
-  icon: string;
-  onPress: () => void;
-}
-
-function QuickAccessCard({ title, subtitle, icon, onPress }: QuickAccessCardProps) {
-  return (
-    <TouchableOpacity style={styles.quickAccessCard} onPress={onPress} activeOpacity={0.8}>
-      <Text style={styles.quickAccessIcon}>{icon}</Text>
-      <Text style={styles.quickAccessTitle}>{title}</Text>
-      <Text style={styles.quickAccessSubtitle}>{subtitle}</Text>
-    </TouchableOpacity>
-  );
-}
-
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

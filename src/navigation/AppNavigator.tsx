@@ -3,13 +3,13 @@
  * With authentication flow
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, StyleSheet, Platform, ActivityIndicator, TouchableOpacity, Text } from 'react-native';
 
-import { colors } from '../theme';
+import { useColors } from '../hooks/useColors';
 import { RootStackParamList, BottomTabParamList, AuthStackParamList } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -41,27 +41,10 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const Tab = createBottomTabNavigator<BottomTabParamList>();
 
-const screenOptions = {
-  headerStyle: {
-    backgroundColor: colors.background,
-  },
-  headerTintColor: colors.textPrimary,
-  headerTitleStyle: {
-    fontWeight: '600' as const,
-  },
-  contentStyle: {
-    backgroundColor: colors.background,
-  },
-};
-
-const authScreenOptions = {
-  headerShown: false,
-  contentStyle: {
-    backgroundColor: colors.background,
-  },
-};
-
 function LoadingScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <View style={styles.loadingContainer}>
       <ActivityIndicator size="large" color={colors.primary} />
@@ -70,6 +53,15 @@ function LoadingScreen() {
 }
 
 function AuthNavigator() {
+  const colors = useColors();
+
+  const authScreenOptions = useMemo(() => ({
+    headerShown: false,
+    contentStyle: {
+      backgroundColor: colors.background,
+    },
+  }), [colors]);
+
   return (
     <AuthStack.Navigator screenOptions={authScreenOptions}>
       <AuthStack.Screen name="Login" component={LoginScreen} />
@@ -92,6 +84,9 @@ function SettingsButton() {
 }
 
 function TabNavigator() {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <View style={styles.container}>
       <Tab.Navigator
@@ -171,6 +166,21 @@ function TabNavigator() {
 }
 
 function MainNavigator() {
+  const colors = useColors();
+
+  const screenOptions = useMemo(() => ({
+    headerStyle: {
+      backgroundColor: colors.background,
+    },
+    headerTintColor: colors.textPrimary,
+    headerTitleStyle: {
+      fontWeight: '600' as const,
+    },
+    contentStyle: {
+      backgroundColor: colors.background,
+    },
+  }), [colors]);
+
   return (
     <Stack.Navigator screenOptions={screenOptions}>
       <Stack.Screen
@@ -270,7 +280,7 @@ export default function AppNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

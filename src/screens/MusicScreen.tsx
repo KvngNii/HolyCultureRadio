@@ -3,7 +3,7 @@
  * Spotify integration for streaming Christian music
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,8 @@ import {
   Dimensions,
   Alert,
 } from 'react-native';
-import { colors, typography, spacing, shadows } from '../theme';
+import { typography, spacing, shadows } from '../theme';
+import { useColors } from '../hooks/useColors';
 import { SpotifyPlaylist, SpotifyTrack, SpotifyAlbum } from '../types';
 
 const { width } = Dimensions.get('window');
@@ -141,6 +142,8 @@ const mockAlbums: SpotifyAlbum[] = [
 const genres = ['All', 'Gospel', 'CCM', 'Christian Hip-Hop', 'Worship', 'R&B'];
 
 export default function MusicScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [isConnected, setIsConnected] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState('All');
 
@@ -427,7 +430,7 @@ export default function MusicScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

@@ -2,10 +2,10 @@
  * Holy Culture Radio - Tab Bar Icon Component
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { colors } from '../theme';
+import { useColors } from '../hooks/useColors';
 
 interface TabBarIconProps {
   routeName: string;
@@ -25,6 +25,8 @@ const iconMap: Record<string, string> = {
 };
 
 export default function TabBarIcon({ routeName, focused, color, size }: TabBarIconProps) {
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const iconName = iconMap[routeName] || 'circle';
   const iconColor = focused ? colors.primary : colors.textMuted;
 
@@ -35,7 +37,7 @@ export default function TabBarIcon({ routeName, focused, color, size }: TabBarIc
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',

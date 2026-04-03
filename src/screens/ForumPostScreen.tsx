@@ -3,7 +3,7 @@
  * View and reply to forum posts
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,8 @@ import {
   Platform,
 } from 'react-native';
 import { RouteProp, useRoute } from '@react-navigation/native';
-import { colors, typography, spacing } from '../theme';
+import { typography, spacing } from '../theme';
+import { useColors } from '../hooks/useColors';
 import { RootStackParamList, ForumReply } from '../types';
 
 type ForumPostRouteProp = RouteProp<RootStackParamList, 'ForumPost'>;
@@ -127,6 +128,8 @@ const mockReplies: ForumReply[] = [
 
 export default function ForumPostScreen() {
   const route = useRoute<ForumPostRouteProp>();
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [isLiked, setIsLiked] = useState(mockPost.isLiked);
   const [likes, setLikes] = useState(mockPost.likes);
   const [replyText, setReplyText] = useState('');
@@ -342,7 +345,7 @@ export default function ForumPostScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

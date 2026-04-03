@@ -3,7 +3,7 @@
  * Discussions and community interaction
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,8 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { colors, typography, spacing } from '../theme';
+import { typography, spacing } from '../theme';
+import { useColors } from '../hooks/useColors';
 import { RootStackParamList, ForumPost, ForumCategory } from '../types';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -149,11 +150,14 @@ const mockPosts: ForumPost[] = [
 
 export default function ForumScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const colors = useColors();
   const [selectedTab, setSelectedTab] = useState<'feed' | 'categories'>('feed');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [posts, setPosts] = useState(mockPosts);
+
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -382,7 +386,7 @@ export default function ForumScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -671,4 +675,4 @@ const styles = StyleSheet.create({
     color: colors.textOnPrimary,
     fontWeight: '300',
   },
-});
+} as const);
