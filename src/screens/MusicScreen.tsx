@@ -3,7 +3,7 @@
  * Spotify integration for streaming Christian music
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,131 +13,50 @@ import {
   FlatList,
   Dimensions,
   Alert,
+  ActivityIndicator,
+  Image,
+  Linking,
 } from 'react-native';
 import { typography, spacing, shadows } from '../theme';
 import { useColors } from '../hooks/useColors';
-import { SpotifyPlaylist, SpotifyTrack, SpotifyAlbum } from '../types';
+import { spotifyService } from '../services/spotify';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - spacing.screenPadding * 2 - spacing.md) / 2;
 
-// Mock Spotify data
-const mockPlaylists: SpotifyPlaylist[] = [
-  {
-    id: '1',
-    name: 'Holy Culture Hits',
-    description: 'The best Christian Hip-Hop and Gospel tracks',
-    imageUrl: '',
-    trackCount: 50,
-    owner: 'Holy Culture Radio',
-    uri: 'spotify:playlist:1',
-  },
-  {
-    id: '2',
-    name: 'Worship Essentials',
-    description: 'Uplifting worship songs for your daily devotion',
-    imageUrl: '',
-    trackCount: 75,
-    owner: 'Holy Culture Radio',
-    uri: 'spotify:playlist:2',
-  },
-  {
-    id: '3',
-    name: 'Gospel Classics',
-    description: 'Timeless gospel favorites',
-    imageUrl: '',
-    trackCount: 40,
-    owner: 'Holy Culture Radio',
-    uri: 'spotify:playlist:3',
-  },
-  {
-    id: '4',
-    name: 'New Christian Music',
-    description: 'Fresh releases from your favorite artists',
-    imageUrl: '',
-    trackCount: 30,
-    owner: 'Holy Culture Radio',
-    uri: 'spotify:playlist:4',
-  },
-];
+interface SpotifyTrackData {
+  id: string;
+  name: string;
+  uri: string;
+  duration_ms: number;
+  preview_url: string | null;
+  album: {
+    id: string;
+    name: string;
+    images: Array<{ url: string }>;
+  };
+  artists: Array<{ id: string; name: string }>;
+}
 
-const mockTracks: SpotifyTrack[] = [
-  {
-    id: '1',
-    name: 'Way Maker',
-    artist: 'Sinach',
-    album: 'Way Maker',
-    albumArt: '',
-    duration: 284000,
-    uri: 'spotify:track:1',
-  },
-  {
-    id: '2',
-    name: 'Jireh',
-    artist: 'Elevation Worship',
-    album: 'Lion',
-    albumArt: '',
-    duration: 326000,
-    uri: 'spotify:track:2',
-  },
-  {
-    id: '3',
-    name: 'Graves Into Gardens',
-    artist: 'Elevation Worship',
-    album: 'Graves Into Gardens',
-    albumArt: '',
-    duration: 362000,
-    uri: 'spotify:track:3',
-  },
-  {
-    id: '4',
-    name: 'Blessing',
-    artist: 'Lecrae',
-    album: 'Restoration',
-    albumArt: '',
-    duration: 245000,
-    uri: 'spotify:track:4',
-  },
-  {
-    id: '5',
-    name: 'The Goodness',
-    artist: 'TobyMac',
-    album: 'Life After Death',
-    albumArt: '',
-    duration: 198000,
-    uri: 'spotify:track:5',
-  },
-];
+interface SpotifyPlaylistData {
+  id: string;
+  name: string;
+  description: string;
+  uri: string;
+  images: Array<{ url: string }>;
+  owner: { display_name: string };
+  tracks: { total: number };
+}
 
-const mockAlbums: SpotifyAlbum[] = [
-  {
-    id: '1',
-    name: 'Restoration',
-    artist: 'Lecrae',
-    imageUrl: '',
-    releaseDate: '2020',
-    trackCount: 12,
-    uri: 'spotify:album:1',
-  },
-  {
-    id: '2',
-    name: 'Lion',
-    artist: 'Elevation Worship',
-    imageUrl: '',
-    releaseDate: '2022',
-    trackCount: 13,
-    uri: 'spotify:album:2',
-  },
-  {
-    id: '3',
-    name: 'Church Volume Two',
-    artist: 'Maverick City Music',
-    imageUrl: '',
-    releaseDate: '2022',
-    trackCount: 17,
-    uri: 'spotify:album:3',
-  },
-];
+interface SpotifyAlbumData {
+  id: string;
+  name: string;
+  uri: string;
+  images: Array<{ url: string }>;
+  artists: Array<{ name: string }>;
+  release_date: string;
+  total_tracks: number;
+}
 
 const genres = ['All', 'Gospel', 'CCM', 'Christian Hip-Hop', 'Worship', 'R&B'];
 
@@ -145,18 +64,159 @@ export default function MusicScreen() {
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [isConnected, setIsConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedGenre, setSelectedGenre] = useState('All');
+  const [playlists, setPlaylists] = useState<SpotifyPlaylistData[]>([]);
+  const [tracks, setTracks] = useState<SpotifyTrackData[]>([]);
+  const [albums, setAlbums] = useState<SpotifyAlbumData[]>([]);
+  const [recentTracks, setRecentTracks] = useState<SpotifyTrackData[]>([]);
+  const [currentlyPlaying, setCurrentlyPlaying] = useState<SpotifyTrackData | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
 
-  const connectToSpotify = () => {
-    // In production, this would trigger Spotify OAuth flow
+  // Check authentication on mount
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    const authenticated = await spotifyService.isAuthenticated();
+    setIsConnected(authenticated);
+    if (authenticated) {
+      loadSpotifyData();
+    } else {
+      setIsLoading(false);
+    }
+  };
+
+  const connectToSpotify = async () => {
+    try {
+      setIsLoading(true);
+      const success = await spotifyService.login();
+      if (success) {
+        setIsConnected(true);
+        await loadSpotifyData();
+      } else {
+        Alert.alert('Connection Failed', 'Could not connect to Spotify. Please try again.');
+      }
+    } catch (error) {
+      console.error('Spotify connect error:', error);
+      Alert.alert('Error', 'An error occurred while connecting to Spotify.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadSpotifyData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      // Fetch user profile
+      const user = await spotifyService.getCurrentUser();
+      setUserProfile(user);
+
+      // Fetch Christian/Gospel music based on selected genre
+      const genreQuery = selectedGenre === 'All' ? 'christian gospel worship' : selectedGenre.toLowerCase();
+
+      // Fetch tracks
+      const searchResult = await spotifyService.searchChristianMusic(genreQuery, 20);
+      if (searchResult?.tracks?.items) {
+        setTracks(searchResult.tracks.items);
+      }
+
+      // Fetch featured playlists
+      const featuredResult = await spotifyService.getFeaturedPlaylists(10);
+      if (featuredResult?.playlists?.items) {
+        setPlaylists(featuredResult.playlists.items);
+      }
+
+      // Fetch new releases (albums)
+      const releasesResult = await spotifyService.getNewReleases(10);
+      if (releasesResult?.albums?.items) {
+        setAlbums(releasesResult.albums.items);
+      }
+
+      // Fetch recently played
+      const recentResult = await spotifyService.getRecentlyPlayed(10);
+      if (recentResult?.items) {
+        setRecentTracks(recentResult.items.map((item: any) => item.track));
+      }
+
+      // Get current playback
+      const playbackState = await spotifyService.getPlaybackState();
+      if (playbackState?.item) {
+        setCurrentlyPlaying(playbackState.item);
+      }
+    } catch (error) {
+      console.error('Error loading Spotify data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedGenre]);
+
+  // Reload when genre changes
+  useEffect(() => {
+    if (isConnected) {
+      loadSpotifyData();
+    }
+  }, [selectedGenre, isConnected, loadSpotifyData]);
+
+  const disconnectSpotify = async () => {
     Alert.alert(
-      'Connect to Spotify',
-      'To stream music, you need to connect your Spotify account. You\'ll need a Spotify Premium subscription for full playback.',
+      'Disconnect Spotify',
+      'Are you sure you want to disconnect your Spotify account?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Connect', onPress: () => setIsConnected(true) },
+        {
+          text: 'Disconnect',
+          style: 'destructive',
+          onPress: async () => {
+            await spotifyService.disconnect();
+            setIsConnected(false);
+            setPlaylists([]);
+            setTracks([]);
+            setAlbums([]);
+            setRecentTracks([]);
+            setUserProfile(null);
+          },
+        },
       ]
     );
+  };
+
+  const playTrack = async (track: SpotifyTrackData) => {
+    try {
+      // Try to play via Spotify Connect
+      await spotifyService.play(track.uri);
+      setCurrentlyPlaying(track);
+    } catch (error) {
+      // If no active device, try preview URL or open Spotify
+      if (track.preview_url) {
+        Alert.alert(
+          'Play Preview',
+          'No active Spotify device found. Would you like to play a 30-second preview or open in Spotify?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Spotify', onPress: () => Linking.openURL(track.uri) },
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Open in Spotify',
+          'Open this track in the Spotify app?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open', onPress: () => Linking.openURL(track.uri) },
+          ]
+        );
+      }
+    }
+  };
+
+  const openPlaylist = (playlist: SpotifyPlaylistData) => {
+    Linking.openURL(playlist.uri);
+  };
+
+  const openAlbum = (album: SpotifyAlbumData) => {
+    Linking.openURL(album.uri);
   };
 
   const formatDuration = (ms: number): string => {
@@ -165,41 +225,88 @@ export default function MusicScreen() {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const renderPlaylistCard = ({ item }: { item: SpotifyPlaylist }) => (
-    <TouchableOpacity
-      style={styles.playlistCard}
-      onPress={() => {
-        if (!isConnected) {
-          connectToSpotify();
-        }
-      }}
-      activeOpacity={0.9}
-    >
-      <View style={styles.playlistImage}>
-        <Text style={styles.playlistImageText}>🎵</Text>
-      </View>
-      <Text style={styles.playlistName} numberOfLines={2}>{item.name}</Text>
-      <Text style={styles.playlistInfo}>{item.trackCount} songs</Text>
-    </TouchableOpacity>
-  );
+  const getImageUrl = (images: Array<{ url: string }> | undefined, size = 0): string | null => {
+    if (!images || images.length === 0) return null;
+    return images[size]?.url || images[0]?.url || null;
+  };
 
-  const renderAlbumCard = ({ item }: { item: SpotifyAlbum }) => (
-    <TouchableOpacity
-      style={styles.albumCard}
-      onPress={() => {
-        if (!isConnected) {
-          connectToSpotify();
-        }
-      }}
-      activeOpacity={0.9}
-    >
-      <View style={styles.albumImage}>
-        <Text style={styles.albumImageText}>💿</Text>
-      </View>
-      <Text style={styles.albumName} numberOfLines={1}>{item.name}</Text>
-      <Text style={styles.albumArtist} numberOfLines={1}>{item.artist}</Text>
-    </TouchableOpacity>
-  );
+  const renderPlaylistCard = ({ item }: { item: SpotifyPlaylistData }) => {
+    const imageUrl = getImageUrl(item.images);
+    return (
+      <TouchableOpacity
+        style={styles.playlistCard}
+        onPress={() => openPlaylist(item)}
+        activeOpacity={0.9}
+      >
+        {imageUrl ? (
+          <Image source={{ uri: imageUrl }} style={styles.playlistImage} />
+        ) : (
+          <View style={[styles.playlistImage, styles.placeholderImage]}>
+            <Text style={styles.playlistImageText}>🎵</Text>
+          </View>
+        )}
+        <Text style={styles.playlistName} numberOfLines={2}>{item.name}</Text>
+        <Text style={styles.playlistInfo}>{item.tracks?.total || 0} songs</Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderAlbumCard = ({ item }: { item: SpotifyAlbumData }) => {
+    const imageUrl = getImageUrl(item.images);
+    return (
+      <TouchableOpacity
+        style={styles.albumCard}
+        onPress={() => openAlbum(item)}
+        activeOpacity={0.9}
+      >
+        {imageUrl ? (
+          <Image source={{ uri: imageUrl }} style={styles.albumImage} />
+        ) : (
+          <View style={[styles.albumImage, styles.placeholderImage]}>
+            <Text style={styles.albumImageText}>💿</Text>
+          </View>
+        )}
+        <Text style={styles.albumName} numberOfLines={1}>{item.name}</Text>
+        <Text style={styles.albumArtist} numberOfLines={1}>
+          {item.artists?.map(a => a.name).join(', ') || 'Unknown Artist'}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderTrackItem = (track: SpotifyTrackData, index: number) => {
+    const imageUrl = getImageUrl(track.album?.images, 2);
+    const isPlaying = currentlyPlaying?.id === track.id;
+
+    return (
+      <TouchableOpacity
+        key={track.id}
+        style={[styles.trackItem, isPlaying && styles.trackItemPlaying]}
+        onPress={() => playTrack(track)}
+        activeOpacity={0.8}
+      >
+        <Text style={[styles.trackNumber, isPlaying && styles.trackNumberPlaying]}>
+          {isPlaying ? '▶' : index + 1}
+        </Text>
+        {imageUrl ? (
+          <Image source={{ uri: imageUrl }} style={styles.trackImage} />
+        ) : (
+          <View style={[styles.trackImage, styles.placeholderImage]}>
+            <Text style={styles.trackImageText}>🎵</Text>
+          </View>
+        )}
+        <View style={styles.trackInfo}>
+          <Text style={[styles.trackName, isPlaying && styles.trackNamePlaying]} numberOfLines={1}>
+            {track.name}
+          </Text>
+          <Text style={styles.trackArtist} numberOfLines={1}>
+            {track.artists?.map(a => a.name).join(', ') || 'Unknown Artist'}
+          </Text>
+        </View>
+        <Text style={styles.trackDuration}>{formatDuration(track.duration_ms)}</Text>
+      </TouchableOpacity>
+    );
+  };
 
   if (!isConnected) {
     return (
@@ -215,25 +322,20 @@ export default function MusicScreen() {
               Connect your Spotify account to stream millions of Christian songs,
               albums, and curated playlists right here in the Holy Culture app.
             </Text>
-            <TouchableOpacity style={styles.connectButton} onPress={connectToSpotify}>
-              <Text style={styles.connectButtonText}>Connect Spotify</Text>
+            <TouchableOpacity
+              style={styles.connectButton}
+              onPress={connectToSpotify}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.connectButtonText}>Connect Spotify</Text>
+              )}
             </TouchableOpacity>
             <Text style={styles.premiumNote}>
               * Spotify Premium required for full playback
             </Text>
-          </View>
-
-          {/* Featured Playlists Preview */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Holy Culture Playlists</Text>
-            <FlatList
-              data={mockPlaylists.slice(0, 2)}
-              renderItem={renderPlaylistCard}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalList}
-            />
           </View>
 
           {/* Features */}
@@ -274,18 +376,54 @@ export default function MusicScreen() {
     );
   }
 
+  if (isLoading && tracks.length === 0) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading music...</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Connected Header */}
       <View style={styles.connectedHeader}>
         <View style={styles.spotifyBadge}>
           <Text style={styles.spotifyBadgeIcon}>♪</Text>
-          <Text style={styles.spotifyBadgeText}>Connected to Spotify</Text>
+          <Text style={styles.spotifyBadgeText}>
+            {userProfile?.display_name ? `Hi, ${userProfile.display_name}` : 'Connected to Spotify'}
+          </Text>
         </View>
-        <TouchableOpacity onPress={() => setIsConnected(false)}>
+        <TouchableOpacity onPress={disconnectSpotify}>
           <Text style={styles.disconnectText}>Disconnect</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Currently Playing */}
+      {currentlyPlaying && (
+        <View style={styles.nowPlayingBanner}>
+          {getImageUrl(currentlyPlaying.album?.images, 2) ? (
+            <Image
+              source={{ uri: getImageUrl(currentlyPlaying.album?.images, 2)! }}
+              style={styles.nowPlayingImage}
+            />
+          ) : (
+            <View style={[styles.nowPlayingImage, styles.placeholderImage]}>
+              <Text>🎵</Text>
+            </View>
+          )}
+          <View style={styles.nowPlayingInfo}>
+            <Text style={styles.nowPlayingLabel}>NOW PLAYING</Text>
+            <Text style={styles.nowPlayingTitle} numberOfLines={1}>
+              {currentlyPlaying.name}
+            </Text>
+            <Text style={styles.nowPlayingArtist} numberOfLines={1}>
+              {currentlyPlaying.artists?.map(a => a.name).join(', ')}
+            </Text>
+          </View>
+        </View>
+      )}
 
       {/* Genre Filter */}
       <ScrollView
@@ -315,87 +453,71 @@ export default function MusicScreen() {
         ))}
       </ScrollView>
 
-      {/* Holy Culture Playlists */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Holy Culture Playlists</Text>
-          <TouchableOpacity>
-            <Text style={styles.seeAllText}>See All</Text>
-          </TouchableOpacity>
+      {/* Featured Playlists */}
+      {playlists.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Featured Playlists</Text>
+          </View>
+          <FlatList
+            data={playlists}
+            renderItem={renderPlaylistCard}
+            keyExtractor={(item) => item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.horizontalList}
+          />
         </View>
-        <FlatList
-          data={mockPlaylists}
-          renderItem={renderPlaylistCard}
-          keyExtractor={(item) => item.id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontalList}
-        />
-      </View>
+      )}
 
-      {/* Trending Songs */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Trending Now</Text>
-          <TouchableOpacity>
-            <Text style={styles.seeAllText}>See All</Text>
-          </TouchableOpacity>
+      {/* Christian Music */}
+      {tracks.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>
+              {selectedGenre === 'All' ? 'Christian Music' : selectedGenre}
+            </Text>
+          </View>
+          {tracks.slice(0, 10).map((track, index) => renderTrackItem(track, index))}
         </View>
-        {mockTracks.map((track, index) => (
-          <TouchableOpacity
-            key={track.id}
-            style={styles.trackItem}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.trackNumber}>{index + 1}</Text>
-            <View style={styles.trackImage}>
-              <Text style={styles.trackImageText}>🎵</Text>
-            </View>
-            <View style={styles.trackInfo}>
-              <Text style={styles.trackName} numberOfLines={1}>{track.name}</Text>
-              <Text style={styles.trackArtist} numberOfLines={1}>{track.artist}</Text>
-            </View>
-            <Text style={styles.trackDuration}>{formatDuration(track.duration)}</Text>
-            <TouchableOpacity style={styles.trackMore}>
-              <Text style={styles.trackMoreText}>⋯</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        ))}
-      </View>
+      )}
 
       {/* New Releases */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>New Releases</Text>
-          <TouchableOpacity>
-            <Text style={styles.seeAllText}>See All</Text>
-          </TouchableOpacity>
+      {albums.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>New Releases</Text>
+          </View>
+          <FlatList
+            data={albums}
+            renderItem={renderAlbumCard}
+            keyExtractor={(item) => item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.horizontalList}
+          />
         </View>
-        <FlatList
-          data={mockAlbums}
-          renderItem={renderAlbumCard}
-          keyExtractor={(item) => item.id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontalList}
-        />
-      </View>
+      )}
 
       {/* Browse by Mood */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Browse by Mood</Text>
         <View style={styles.moodGrid}>
           {[
-            { name: 'Worship', color: '#C41E3A', emoji: '🙏' },
-            { name: 'Uplifting', color: '#FF8C00', emoji: '☀️' },
-            { name: 'Peaceful', color: '#4169E1', emoji: '🕊️' },
-            { name: 'Energetic', color: '#32CD32', emoji: '⚡' },
-            { name: 'Reflective', color: '#9370DB', emoji: '💭' },
-            { name: 'Joyful', color: '#FFD700', emoji: '😊' },
+            { name: 'Worship', color: '#C41E3A', emoji: '🙏', query: 'worship' },
+            { name: 'Uplifting', color: '#FF8C00', emoji: '☀️', query: 'uplifting christian' },
+            { name: 'Peaceful', color: '#4169E1', emoji: '🕊️', query: 'peaceful worship' },
+            { name: 'Energetic', color: '#32CD32', emoji: '⚡', query: 'christian rock' },
+            { name: 'Reflective', color: '#9370DB', emoji: '💭', query: 'christian meditation' },
+            { name: 'Joyful', color: '#FFD700', emoji: '😊', query: 'joyful praise' },
           ].map((mood) => (
             <TouchableOpacity
               key={mood.name}
               style={[styles.moodCard, { backgroundColor: mood.color }]}
+              onPress={() => {
+                // Search for this mood
+                setSelectedGenre(mood.name);
+              }}
             >
               <Text style={styles.moodEmoji}>{mood.emoji}</Text>
               <Text style={styles.moodName}>{mood.name}</Text>
@@ -405,25 +527,35 @@ export default function MusicScreen() {
       </View>
 
       {/* Recently Played */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Recently Played</Text>
-        <View style={styles.recentlyPlayedGrid}>
-          {mockTracks.slice(0, 4).map((track) => (
-            <TouchableOpacity
-              key={track.id}
-              style={styles.recentlyPlayedItem}
-              activeOpacity={0.8}
-            >
-              <View style={styles.recentlyPlayedImage}>
-                <Text style={styles.recentlyPlayedImageText}>🎵</Text>
-              </View>
-              <Text style={styles.recentlyPlayedName} numberOfLines={1}>
-                {track.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
+      {recentTracks.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Recently Played</Text>
+          <View style={styles.recentlyPlayedGrid}>
+            {recentTracks.slice(0, 4).map((track) => {
+              const imageUrl = getImageUrl(track.album?.images, 2);
+              return (
+                <TouchableOpacity
+                  key={track.id}
+                  style={styles.recentlyPlayedItem}
+                  onPress={() => playTrack(track)}
+                  activeOpacity={0.8}
+                >
+                  {imageUrl ? (
+                    <Image source={{ uri: imageUrl }} style={styles.recentlyPlayedImage} />
+                  ) : (
+                    <View style={[styles.recentlyPlayedImage, styles.placeholderImage]}>
+                      <Text style={styles.recentlyPlayedImageText}>🎵</Text>
+                    </View>
+                  )}
+                  <Text style={styles.recentlyPlayedName} numberOfLines={1}>
+                    {track.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
-      </View>
+      )}
 
       <View style={styles.bottomSpacing} />
     </ScrollView>
@@ -434,6 +566,66 @@ const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    ...typography.body,
+    color: colors.textMuted,
+    marginTop: spacing.md,
+  },
+  placeholderImage: {
+    backgroundColor: colors.backgroundSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nowPlayingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: spacing.screenPadding,
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.primary,
+    borderRadius: spacing.cardBorderRadius,
+  },
+  nowPlayingImage: {
+    width: 50,
+    height: 50,
+    borderRadius: spacing.sm,
+    marginRight: spacing.md,
+  },
+  nowPlayingInfo: {
+    flex: 1,
+  },
+  nowPlayingLabel: {
+    ...typography.labelSmall,
+    color: colors.textOnPrimary,
+    opacity: 0.8,
+    letterSpacing: 1,
+  },
+  nowPlayingTitle: {
+    ...typography.body,
+    color: colors.textOnPrimary,
+    fontWeight: '600',
+  },
+  nowPlayingArtist: {
+    ...typography.caption,
+    color: colors.textOnPrimary,
+    opacity: 0.9,
+  },
+  trackItemPlaying: {
+    backgroundColor: colors.backgroundSecondary,
+    borderRadius: spacing.sm,
+    marginHorizontal: spacing.xs,
+  },
+  trackNumberPlaying: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  trackNamePlaying: {
+    color: colors.primary,
   },
   connectBanner: {
     margin: spacing.screenPadding,
@@ -516,9 +708,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     width: CARD_WIDTH,
     height: CARD_WIDTH,
     borderRadius: spacing.cardBorderRadius,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: spacing.sm,
     ...shadows.medium,
   },
@@ -543,12 +732,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     width: 140,
     height: 140,
     borderRadius: spacing.sm,
-    backgroundColor: colors.backgroundSecondary,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   albumImageText: {
     fontSize: 40,
@@ -664,9 +848,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 4,
-    backgroundColor: colors.backgroundSecondary,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginRight: spacing.md,
   },
   trackImageText: {
@@ -736,9 +917,6 @@ const createStyles = (colors: any) => StyleSheet.create({
   recentlyPlayedImage: {
     width: 56,
     height: 56,
-    backgroundColor: colors.surfaceLight,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   recentlyPlayedImageText: {
     fontSize: 24,

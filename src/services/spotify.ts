@@ -3,76 +3,100 @@
  * Handles Spotify authentication and playback
  */
 
+import { authorize, refresh, AuthConfiguration } from 'react-native-app-auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SpotifyTrack, SpotifyPlaylist, SpotifyAlbum } from '../types';
 
 // Spotify API Configuration
+// Replace with your credentials from Spotify Developer Dashboard
 const SPOTIFY_CLIENT_ID = 'YOUR_SPOTIFY_CLIENT_ID';
 const SPOTIFY_REDIRECT_URI = 'holycultureradio://spotify-callback';
-const SPOTIFY_SCOPES = [
-  'streaming',
-  'user-read-email',
-  'user-read-private',
-  'user-read-playback-state',
-  'user-modify-playback-state',
-  'user-read-currently-playing',
-  'playlist-read-private',
-  'playlist-read-collaborative',
-  'user-library-read',
-].join(' ');
+
+const SPOTIFY_AUTH_CONFIG: AuthConfiguration = {
+  clientId: SPOTIFY_CLIENT_ID,
+  redirectUrl: SPOTIFY_REDIRECT_URI,
+  scopes: [
+    'streaming',
+    'user-read-email',
+    'user-read-private',
+    'user-read-playback-state',
+    'user-modify-playback-state',
+    'user-read-currently-playing',
+    'user-read-recently-played',
+    'user-top-read',
+    'playlist-read-private',
+    'playlist-read-collaborative',
+    'user-library-read',
+  ],
+  serviceConfiguration: {
+    authorizationEndpoint: 'https://accounts.spotify.com/authorize',
+    tokenEndpoint: 'https://accounts.spotify.com/api/token',
+  },
+};
+
+const STORAGE_KEY = '@spotify_auth';
+const API_BASE = 'https://api.spotify.com/v1';
+
+interface StoredAuth {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+}
 
 class SpotifyService {
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
+  private expiresAt: number = 0;
   private isConnected: boolean = false;
 
-  /**
-   * Generate the Spotify OAuth URL for authentication
-   */
-  getAuthUrl(): string {
-    const params = new URLSearchParams({
-      client_id: SPOTIFY_CLIENT_ID,
-      response_type: 'code',
-      redirect_uri: SPOTIFY_REDIRECT_URI,
-      scope: SPOTIFY_SCOPES,
-      show_dialog: 'true',
-    });
+  constructor() {
+    this.loadStoredAuth();
+  }
 
-    return `https://accounts.spotify.com/authorize?${params.toString()}`;
+  private async loadStoredAuth() {
+    try {
+      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const auth: StoredAuth = JSON.parse(stored);
+        this.accessToken = auth.accessToken;
+        this.refreshToken = auth.refreshToken;
+        this.expiresAt = auth.expiresAt;
+        this.isConnected = true;
+      }
+    } catch (error) {
+      console.error('Error loading stored auth:', error);
+    }
+  }
+
+  private async saveAuth() {
+    try {
+      const auth: StoredAuth = {
+        accessToken: this.accessToken!,
+        refreshToken: this.refreshToken!,
+        expiresAt: this.expiresAt,
+      };
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
+    } catch (error) {
+      console.error('Error saving auth:', error);
+    }
   }
 
   /**
-   * Handle the OAuth callback and exchange code for tokens
+   * Login with Spotify using OAuth
    */
-  async handleAuthCallback(code: string): Promise<boolean> {
+  async login(): Promise<boolean> {
     try {
-      // In production, this should go through your backend
-      // to keep the client secret secure
-      const response = await fetch('https://accounts.spotify.com/api/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          grant_type: 'authorization_code',
-          code,
-          redirect_uri: SPOTIFY_REDIRECT_URI,
-          client_id: SPOTIFY_CLIENT_ID,
-          // client_secret should be handled server-side
-        }),
-      });
+      const result = await authorize(SPOTIFY_AUTH_CONFIG);
 
-      const data = await response.json();
+      this.accessToken = result.accessToken;
+      this.refreshToken = result.refreshToken;
+      this.expiresAt = new Date(result.accessTokenExpirationDate).getTime();
+      this.isConnected = true;
 
-      if (data.access_token) {
-        this.accessToken = data.access_token;
-        this.refreshToken = data.refresh_token;
-        this.isConnected = true;
-        return true;
-      }
-
-      return false;
+      await this.saveAuth();
+      return true;
     } catch (error) {
-      console.error('Spotify auth error:', error);
+      console.error('Spotify login error:', error);
       return false;
     }
   }
@@ -84,54 +108,68 @@ class SpotifyService {
     if (!this.refreshToken) return false;
 
     try {
-      const response = await fetch('https://accounts.spotify.com/api/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          grant_type: 'refresh_token',
-          refresh_token: this.refreshToken,
-          client_id: SPOTIFY_CLIENT_ID,
-        }),
+      const result = await refresh(SPOTIFY_AUTH_CONFIG, {
+        refreshToken: this.refreshToken,
       });
 
-      const data = await response.json();
+      this.accessToken = result.accessToken;
+      this.refreshToken = result.refreshToken || this.refreshToken;
+      this.expiresAt = new Date(result.accessTokenExpirationDate).getTime();
 
-      if (data.access_token) {
-        this.accessToken = data.access_token;
-        return true;
-      }
-
-      return false;
+      await this.saveAuth();
+      return true;
     } catch (error) {
       console.error('Token refresh error:', error);
+      await this.disconnect();
       return false;
     }
+  }
+
+  /**
+   * Get valid access token, refreshing if needed
+   */
+  private async getValidToken(): Promise<string | null> {
+    if (!this.accessToken) {
+      await this.loadStoredAuth();
+    }
+
+    if (!this.accessToken) return null;
+
+    // Refresh if token expires in less than 5 minutes
+    if (Date.now() >= this.expiresAt - 300000) {
+      const refreshed = await this.refreshAccessToken();
+      if (!refreshed) return null;
+    }
+
+    return this.accessToken;
   }
 
   /**
    * Make authenticated API requests to Spotify
    */
   private async apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
-    if (!this.accessToken) return null;
+    const token = await this.getValidToken();
+    if (!token) return null;
 
     try {
-      const response = await fetch(`https://api.spotify.com/v1${endpoint}`, {
+      const response = await fetch(`${API_BASE}${endpoint}`, {
         ...options,
         headers: {
-          Authorization: `Bearer ${this.accessToken}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
           ...options.headers,
         },
       });
 
       if (response.status === 401) {
-        // Token expired, try to refresh
         const refreshed = await this.refreshAccessToken();
         if (refreshed) {
           return this.apiRequest(endpoint, options);
         }
+        return null;
+      }
+
+      if (response.status === 204) {
         return null;
       }
 
@@ -143,18 +181,43 @@ class SpotifyService {
   }
 
   /**
+   * Check if authenticated
+   */
+  async isAuthenticated(): Promise<boolean> {
+    await this.loadStoredAuth();
+    return this.isConnected && !!this.accessToken;
+  }
+
+  /**
    * Get current user's profile
    */
   async getCurrentUser() {
-    return this.apiRequest('/me');
+    return this.apiRequest<any>('/me');
   }
 
   /**
    * Search for tracks, albums, or playlists
    */
-  async search(query: string, types: ('track' | 'album' | 'playlist')[] = ['track']) {
+  async search(query: string, types: string[] = ['track'], limit = 20) {
     const typeParam = types.join(',');
-    return this.apiRequest(`/search?q=${encodeURIComponent(query)}&type=${typeParam}&limit=20`);
+    return this.apiRequest<any>(`/search?q=${encodeURIComponent(query)}&type=${typeParam}&limit=${limit}`);
+  }
+
+  /**
+   * Search for Christian/Gospel music
+   */
+  async searchChristianMusic(query = '', limit = 30) {
+    const searchQuery = query
+      ? `${query} genre:christian OR genre:gospel`
+      : 'genre:christian OR genre:gospel';
+    return this.apiRequest<any>(`/search?q=${encodeURIComponent(searchQuery)}&type=track&limit=${limit}`);
+  }
+
+  /**
+   * Search worship music
+   */
+  async searchWorshipMusic(limit = 30) {
+    return this.apiRequest<any>(`/search?q=${encodeURIComponent('worship music')}&type=track,playlist&limit=${limit}`);
   }
 
   /**
@@ -167,8 +230,8 @@ class SpotifyService {
   /**
    * Get playlist tracks
    */
-  async getPlaylistTracks(playlistId: string, limit: number = 50, offset: number = 0) {
-    return this.apiRequest(`/playlists/${playlistId}/tracks?limit=${limit}&offset=${offset}`);
+  async getPlaylistTracks(playlistId: string, limit = 50, offset = 0) {
+    return this.apiRequest<any>(`/playlists/${playlistId}/tracks?limit=${limit}&offset=${offset}`);
   }
 
   /**
@@ -179,37 +242,84 @@ class SpotifyService {
   }
 
   /**
+   * Get album tracks
+   */
+  async getAlbumTracks(albumId: string, limit = 50) {
+    return this.apiRequest<any>(`/albums/${albumId}/tracks?limit=${limit}`);
+  }
+
+  /**
    * Get user's saved tracks
    */
-  async getSavedTracks(limit: number = 50, offset: number = 0) {
-    return this.apiRequest(`/me/tracks?limit=${limit}&offset=${offset}`);
+  async getSavedTracks(limit = 50, offset = 0) {
+    return this.apiRequest<any>(`/me/tracks?limit=${limit}&offset=${offset}`);
   }
 
   /**
    * Get user's playlists
    */
-  async getUserPlaylists(limit: number = 50, offset: number = 0) {
-    return this.apiRequest(`/me/playlists?limit=${limit}&offset=${offset}`);
+  async getUserPlaylists(limit = 50, offset = 0) {
+    return this.apiRequest<any>(`/me/playlists?limit=${limit}&offset=${offset}`);
   }
 
   /**
    * Get featured playlists
    */
-  async getFeaturedPlaylists() {
-    return this.apiRequest('/browse/featured-playlists');
+  async getFeaturedPlaylists(limit = 20) {
+    return this.apiRequest<any>(`/browse/featured-playlists?limit=${limit}&country=US`);
   }
 
   /**
-   * Get recommendations based on seed tracks
+   * Get category playlists (e.g., "christian", "gospel")
    */
-  async getRecommendations(seedTracks: string[], seedArtists: string[] = [], seedGenres: string[] = []) {
-    const params = new URLSearchParams();
-    if (seedTracks.length) params.append('seed_tracks', seedTracks.join(','));
-    if (seedArtists.length) params.append('seed_artists', seedArtists.join(','));
-    if (seedGenres.length) params.append('seed_genres', seedGenres.join(','));
-    params.append('limit', '20');
+  async getCategoryPlaylists(categoryId: string, limit = 20) {
+    return this.apiRequest<any>(`/browse/categories/${categoryId}/playlists?limit=${limit}&country=US`);
+  }
 
-    return this.apiRequest(`/recommendations?${params.toString()}`);
+  /**
+   * Get new releases
+   */
+  async getNewReleases(limit = 20) {
+    return this.apiRequest<any>(`/browse/new-releases?limit=${limit}&country=US`);
+  }
+
+  /**
+   * Get recommendations
+   */
+  async getRecommendations(
+    seedTracks: string[] = [],
+    seedArtists: string[] = [],
+    seedGenres: string[] = ['christian', 'gospel'],
+    limit = 20
+  ) {
+    const params = new URLSearchParams();
+    if (seedTracks.length) params.append('seed_tracks', seedTracks.slice(0, 2).join(','));
+    if (seedArtists.length) params.append('seed_artists', seedArtists.slice(0, 2).join(','));
+    if (seedGenres.length) params.append('seed_genres', seedGenres.slice(0, 1).join(','));
+    params.append('limit', String(limit));
+
+    return this.apiRequest<any>(`/recommendations?${params.toString()}`);
+  }
+
+  /**
+   * Get recently played tracks
+   */
+  async getRecentlyPlayed(limit = 20) {
+    return this.apiRequest<any>(`/me/player/recently-played?limit=${limit}`);
+  }
+
+  /**
+   * Get user's top tracks
+   */
+  async getTopTracks(timeRange = 'medium_term', limit = 20) {
+    return this.apiRequest<any>(`/me/top/tracks?time_range=${timeRange}&limit=${limit}`);
+  }
+
+  /**
+   * Get available genre seeds
+   */
+  async getAvailableGenreSeeds() {
+    return this.apiRequest<any>('/recommendations/available-genre-seeds');
   }
 
   // Playback Controls (requires Spotify Premium and active device)
@@ -267,20 +377,20 @@ class SpotifyService {
    * Get current playback state
    */
   async getPlaybackState() {
-    return this.apiRequest('/me/player');
+    return this.apiRequest<any>('/me/player');
   }
 
   /**
    * Get available devices
    */
   async getDevices() {
-    return this.apiRequest('/me/player/devices');
+    return this.apiRequest<any>('/me/player/devices');
   }
 
   /**
    * Transfer playback to a device
    */
-  async transferPlayback(deviceId: string, play: boolean = true) {
+  async transferPlayback(deviceId: string, play = true) {
     return this.apiRequest('/me/player', {
       method: 'PUT',
       body: JSON.stringify({
@@ -298,12 +408,21 @@ class SpotifyService {
   }
 
   /**
+   * Get access token for external use
+   */
+  async getAccessToken(): Promise<string | null> {
+    return this.getValidToken();
+  }
+
+  /**
    * Disconnect from Spotify
    */
-  disconnect() {
+  async disconnect() {
     this.accessToken = null;
     this.refreshToken = null;
+    this.expiresAt = 0;
     this.isConnected = false;
+    await AsyncStorage.removeItem(STORAGE_KEY);
   }
 }
 
