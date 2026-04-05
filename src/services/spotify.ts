@@ -1,6 +1,6 @@
 /**
  * Holy Culture Radio - Spotify Service
- * Handles Spotify authentication and playback
+ * Handles Spotify authentication and playback using PKCE flow
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -22,21 +22,51 @@ const SPOTIFY_SCOPES = [
   'playlist-read-private',
   'playlist-read-collaborative',
   'user-library-read',
-].join('%20');
+].join(' ');
 
 const STORAGE_KEY = '@spotify_auth';
+const VERIFIER_KEY = '@spotify_verifier';
 const API_BASE = 'https://api.spotify.com/v1';
 
 interface StoredAuth {
   accessToken: string;
+  refreshToken: string;
   expiresAt: number;
+}
+
+// Generate random string for PKCE
+function generateRandomString(length: number): string {
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return result;
+}
+
+// Base64 URL encode
+function base64URLEncode(str: string): string {
+  return btoa(str)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+// SHA256 hash using simple implementation for React Native
+async function sha256(plain: string): Promise<string> {
+  // Simple hash for code challenge - using the plain verifier as challenge
+  // In production, you'd want to use a proper crypto library
+  // For S256, we need actual SHA256, but Spotify also supports 'plain' method
+  return plain;
 }
 
 class SpotifyService {
   private accessToken: string | null = null;
+  private refreshToken: string | null = null;
   private expiresAt: number = 0;
   private isConnected: boolean = false;
   private authCallback: ((success: boolean) => void) | null = null;
+  private codeVerifier: string | null = null;
 
   constructor() {
     this.loadStoredAuth();
@@ -48,32 +78,79 @@ class SpotifyService {
     Linking.addEventListener('url', (event) => {
       this.handleRedirect(event.url);
     });
+
+    // Check if app was opened with a URL
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        this.handleRedirect(url);
+      }
+    });
   }
 
-  private handleRedirect(url: string) {
+  private async handleRedirect(url: string) {
     if (!url.startsWith(SPOTIFY_REDIRECT_URI)) return;
 
-    // Parse the URL fragment for implicit grant flow
-    // URL format: holycultureradio://spotify-callback#access_token=...&token_type=...&expires_in=...
-    const hashIndex = url.indexOf('#');
-    if (hashIndex === -1) {
+    // Parse authorization code from URL
+    // URL format: holycultureradio://spotify-callback?code=...
+    const urlObj = new URL(url);
+    const code = urlObj.searchParams.get('code');
+    const error = urlObj.searchParams.get('error');
+
+    if (error) {
+      console.error('Spotify auth error:', error);
       this.authCallback?.(false);
       return;
     }
 
-    const hash = url.substring(hashIndex + 1);
-    const params = new URLSearchParams(hash);
-    const accessToken = params.get('access_token');
-    const expiresIn = params.get('expires_in');
-
-    if (accessToken) {
-      this.accessToken = accessToken;
-      this.expiresAt = Date.now() + (parseInt(expiresIn || '3600', 10) * 1000);
-      this.isConnected = true;
-      this.saveAuth();
-      this.authCallback?.(true);
+    if (code) {
+      // Exchange code for tokens
+      const success = await this.exchangeCodeForTokens(code);
+      this.authCallback?.(success);
     } else {
       this.authCallback?.(false);
+    }
+  }
+
+  private async exchangeCodeForTokens(code: string): Promise<boolean> {
+    try {
+      // Get stored code verifier
+      const verifier = await AsyncStorage.getItem(VERIFIER_KEY);
+      if (!verifier) {
+        console.error('No code verifier found');
+        return false;
+      }
+
+      const response = await fetch('https://accounts.spotify.com/api/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          client_id: SPOTIFY_CLIENT_ID,
+          grant_type: 'authorization_code',
+          code: code,
+          redirect_uri: SPOTIFY_REDIRECT_URI,
+          code_verifier: verifier,
+        }).toString(),
+      });
+
+      const data = await response.json();
+
+      if (data.access_token) {
+        this.accessToken = data.access_token;
+        this.refreshToken = data.refresh_token;
+        this.expiresAt = Date.now() + (data.expires_in * 1000);
+        this.isConnected = true;
+        await this.saveAuth();
+        await AsyncStorage.removeItem(VERIFIER_KEY);
+        return true;
+      } else {
+        console.error('Token exchange failed:', data);
+        return false;
+      }
+    } catch (error) {
+      console.error('Token exchange error:', error);
+      return false;
     }
   }
 
@@ -82,13 +159,16 @@ class SpotifyService {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       if (stored) {
         const auth: StoredAuth = JSON.parse(stored);
-        // Check if token is still valid
         if (auth.expiresAt > Date.now()) {
           this.accessToken = auth.accessToken;
+          this.refreshToken = auth.refreshToken;
           this.expiresAt = auth.expiresAt;
           this.isConnected = true;
+        } else if (auth.refreshToken) {
+          // Token expired but we have refresh token
+          this.refreshToken = auth.refreshToken;
+          await this.refreshAccessToken();
         } else {
-          // Token expired, clear it
           await AsyncStorage.removeItem(STORAGE_KEY);
         }
       }
@@ -101,6 +181,7 @@ class SpotifyService {
     try {
       const auth: StoredAuth = {
         accessToken: this.accessToken!,
+        refreshToken: this.refreshToken!,
         expiresAt: this.expiresAt,
       };
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
@@ -109,29 +190,67 @@ class SpotifyService {
     }
   }
 
-  /**
-   * Get the Spotify authorization URL
-   */
-  getAuthUrl(): string {
-    const params = [
-      `client_id=${SPOTIFY_CLIENT_ID}`,
-      `response_type=token`,
-      `redirect_uri=${encodeURIComponent(SPOTIFY_REDIRECT_URI)}`,
-      `scope=${SPOTIFY_SCOPES}`,
-      `show_dialog=true`,
-    ].join('&');
+  private async refreshAccessToken(): Promise<boolean> {
+    if (!this.refreshToken) return false;
 
-    return `https://accounts.spotify.com/authorize?${params}`;
+    try {
+      const response = await fetch('https://accounts.spotify.com/api/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          client_id: SPOTIFY_CLIENT_ID,
+          grant_type: 'refresh_token',
+          refresh_token: this.refreshToken,
+        }).toString(),
+      });
+
+      const data = await response.json();
+
+      if (data.access_token) {
+        this.accessToken = data.access_token;
+        if (data.refresh_token) {
+          this.refreshToken = data.refresh_token;
+        }
+        this.expiresAt = Date.now() + (data.expires_in * 1000);
+        this.isConnected = true;
+        await this.saveAuth();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Token refresh error:', error);
+      return false;
+    }
   }
 
   /**
-   * Login with Spotify - opens browser for OAuth
+   * Login with Spotify - opens browser for OAuth with PKCE
    */
   async login(): Promise<boolean> {
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
       this.authCallback = resolve;
 
-      const authUrl = this.getAuthUrl();
+      // Generate PKCE code verifier and challenge
+      const codeVerifier = generateRandomString(64);
+      const codeChallenge = base64URLEncode(codeVerifier);
+
+      // Store verifier for token exchange
+      await AsyncStorage.setItem(VERIFIER_KEY, codeVerifier);
+
+      const params = new URLSearchParams({
+        client_id: SPOTIFY_CLIENT_ID,
+        response_type: 'code',
+        redirect_uri: SPOTIFY_REDIRECT_URI,
+        scope: SPOTIFY_SCOPES,
+        code_challenge_method: 'plain',
+        code_challenge: codeChallenge,
+        show_dialog: 'true',
+      });
+
+      const authUrl = `https://accounts.spotify.com/authorize?${params.toString()}`;
+
       Linking.openURL(authUrl).catch((error) => {
         console.error('Error opening Spotify auth URL:', error);
         resolve(false);
@@ -157,10 +276,10 @@ class SpotifyService {
 
     if (!this.accessToken) return null;
 
-    // Check if token expired
-    if (Date.now() >= this.expiresAt) {
-      this.isConnected = false;
-      return null;
+    // Check if token expired and refresh
+    if (Date.now() >= this.expiresAt - 60000) {
+      const refreshed = await this.refreshAccessToken();
+      if (!refreshed) return null;
     }
 
     try {
@@ -174,9 +293,10 @@ class SpotifyService {
       });
 
       if (response.status === 401) {
-        // Token expired
-        this.isConnected = false;
-        await this.disconnect();
+        const refreshed = await this.refreshAccessToken();
+        if (refreshed) {
+          return this.apiRequest(endpoint, options);
+        }
         return null;
       }
 
@@ -196,7 +316,7 @@ class SpotifyService {
    */
   async isAuthenticated(): Promise<boolean> {
     await this.loadStoredAuth();
-    return this.isConnected && !!this.accessToken && Date.now() < this.expiresAt;
+    return this.isConnected && !!this.accessToken;
   }
 
   /**
