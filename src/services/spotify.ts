@@ -3,54 +3,78 @@
  * Handles Spotify authentication and playback
  */
 
-import { authorize, refresh, AuthConfiguration } from 'react-native-app-auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Linking } from 'react-native';
 import { SpotifyTrack, SpotifyPlaylist, SpotifyAlbum } from '../types';
 
 // Spotify API Configuration
-// Replace with your credentials from Spotify Developer Dashboard
 const SPOTIFY_CLIENT_ID = '32f987a2b6444f02b90ece924503d39f';
 const SPOTIFY_REDIRECT_URI = 'holycultureradio://spotify-callback';
-
-const SPOTIFY_AUTH_CONFIG: AuthConfiguration = {
-  clientId: SPOTIFY_CLIENT_ID,
-  redirectUrl: SPOTIFY_REDIRECT_URI,
-  scopes: [
-    'streaming',
-    'user-read-email',
-    'user-read-private',
-    'user-read-playback-state',
-    'user-modify-playback-state',
-    'user-read-currently-playing',
-    'user-read-recently-played',
-    'user-top-read',
-    'playlist-read-private',
-    'playlist-read-collaborative',
-    'user-library-read',
-  ],
-  serviceConfiguration: {
-    authorizationEndpoint: 'https://accounts.spotify.com/authorize',
-    tokenEndpoint: 'https://accounts.spotify.com/api/token',
-  },
-};
+const SPOTIFY_SCOPES = [
+  'streaming',
+  'user-read-email',
+  'user-read-private',
+  'user-read-playback-state',
+  'user-modify-playback-state',
+  'user-read-currently-playing',
+  'user-read-recently-played',
+  'user-top-read',
+  'playlist-read-private',
+  'playlist-read-collaborative',
+  'user-library-read',
+].join('%20');
 
 const STORAGE_KEY = '@spotify_auth';
 const API_BASE = 'https://api.spotify.com/v1';
 
 interface StoredAuth {
   accessToken: string;
-  refreshToken: string;
   expiresAt: number;
 }
 
 class SpotifyService {
   private accessToken: string | null = null;
-  private refreshToken: string | null = null;
   private expiresAt: number = 0;
   private isConnected: boolean = false;
+  private authCallback: ((success: boolean) => void) | null = null;
 
   constructor() {
     this.loadStoredAuth();
+    this.setupDeepLinkListener();
+  }
+
+  private setupDeepLinkListener() {
+    // Listen for OAuth callback
+    Linking.addEventListener('url', (event) => {
+      this.handleRedirect(event.url);
+    });
+  }
+
+  private handleRedirect(url: string) {
+    if (!url.startsWith(SPOTIFY_REDIRECT_URI)) return;
+
+    // Parse the URL fragment for implicit grant flow
+    // URL format: holycultureradio://spotify-callback#access_token=...&token_type=...&expires_in=...
+    const hashIndex = url.indexOf('#');
+    if (hashIndex === -1) {
+      this.authCallback?.(false);
+      return;
+    }
+
+    const hash = url.substring(hashIndex + 1);
+    const params = new URLSearchParams(hash);
+    const accessToken = params.get('access_token');
+    const expiresIn = params.get('expires_in');
+
+    if (accessToken) {
+      this.accessToken = accessToken;
+      this.expiresAt = Date.now() + (parseInt(expiresIn || '3600', 10) * 1000);
+      this.isConnected = true;
+      this.saveAuth();
+      this.authCallback?.(true);
+    } else {
+      this.authCallback?.(false);
+    }
   }
 
   private async loadStoredAuth() {
@@ -58,10 +82,15 @@ class SpotifyService {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       if (stored) {
         const auth: StoredAuth = JSON.parse(stored);
-        this.accessToken = auth.accessToken;
-        this.refreshToken = auth.refreshToken;
-        this.expiresAt = auth.expiresAt;
-        this.isConnected = true;
+        // Check if token is still valid
+        if (auth.expiresAt > Date.now()) {
+          this.accessToken = auth.accessToken;
+          this.expiresAt = auth.expiresAt;
+          this.isConnected = true;
+        } else {
+          // Token expired, clear it
+          await AsyncStorage.removeItem(STORAGE_KEY);
+        }
       }
     } catch (error) {
       console.error('Error loading stored auth:', error);
@@ -72,7 +101,6 @@ class SpotifyService {
     try {
       const auth: StoredAuth = {
         accessToken: this.accessToken!,
-        refreshToken: this.refreshToken!,
         expiresAt: this.expiresAt,
       };
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
@@ -82,90 +110,73 @@ class SpotifyService {
   }
 
   /**
-   * Login with Spotify using OAuth
+   * Get the Spotify authorization URL
+   */
+  getAuthUrl(): string {
+    const params = [
+      `client_id=${SPOTIFY_CLIENT_ID}`,
+      `response_type=token`,
+      `redirect_uri=${encodeURIComponent(SPOTIFY_REDIRECT_URI)}`,
+      `scope=${SPOTIFY_SCOPES}`,
+      `show_dialog=true`,
+    ].join('&');
+
+    return `https://accounts.spotify.com/authorize?${params}`;
+  }
+
+  /**
+   * Login with Spotify - opens browser for OAuth
    */
   async login(): Promise<boolean> {
-    try {
-      const result = await authorize(SPOTIFY_AUTH_CONFIG);
+    return new Promise((resolve) => {
+      this.authCallback = resolve;
 
-      this.accessToken = result.accessToken;
-      this.refreshToken = result.refreshToken;
-      this.expiresAt = new Date(result.accessTokenExpirationDate).getTime();
-      this.isConnected = true;
-
-      await this.saveAuth();
-      return true;
-    } catch (error) {
-      console.error('Spotify login error:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Refresh the access token
-   */
-  async refreshAccessToken(): Promise<boolean> {
-    if (!this.refreshToken) return false;
-
-    try {
-      const result = await refresh(SPOTIFY_AUTH_CONFIG, {
-        refreshToken: this.refreshToken,
+      const authUrl = this.getAuthUrl();
+      Linking.openURL(authUrl).catch((error) => {
+        console.error('Error opening Spotify auth URL:', error);
+        resolve(false);
       });
 
-      this.accessToken = result.accessToken;
-      this.refreshToken = result.refreshToken || this.refreshToken;
-      this.expiresAt = new Date(result.accessTokenExpirationDate).getTime();
-
-      await this.saveAuth();
-      return true;
-    } catch (error) {
-      console.error('Token refresh error:', error);
-      await this.disconnect();
-      return false;
-    }
-  }
-
-  /**
-   * Get valid access token, refreshing if needed
-   */
-  private async getValidToken(): Promise<string | null> {
-    if (!this.accessToken) {
-      await this.loadStoredAuth();
-    }
-
-    if (!this.accessToken) return null;
-
-    // Refresh if token expires in less than 5 minutes
-    if (Date.now() >= this.expiresAt - 300000) {
-      const refreshed = await this.refreshAccessToken();
-      if (!refreshed) return null;
-    }
-
-    return this.accessToken;
+      // Timeout after 2 minutes
+      setTimeout(() => {
+        if (this.authCallback === resolve) {
+          this.authCallback = null;
+          resolve(false);
+        }
+      }, 120000);
+    });
   }
 
   /**
    * Make authenticated API requests to Spotify
    */
   private async apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
-    const token = await this.getValidToken();
-    if (!token) return null;
+    if (!this.accessToken) {
+      await this.loadStoredAuth();
+    }
+
+    if (!this.accessToken) return null;
+
+    // Check if token expired
+    if (Date.now() >= this.expiresAt) {
+      this.isConnected = false;
+      return null;
+    }
 
     try {
       const response = await fetch(`${API_BASE}${endpoint}`, {
         ...options,
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${this.accessToken}`,
           'Content-Type': 'application/json',
           ...options.headers,
         },
       });
 
       if (response.status === 401) {
-        const refreshed = await this.refreshAccessToken();
-        if (refreshed) {
-          return this.apiRequest(endpoint, options);
-        }
+        // Token expired
+        this.isConnected = false;
+        await this.disconnect();
         return null;
       }
 
@@ -185,7 +196,7 @@ class SpotifyService {
    */
   async isAuthenticated(): Promise<boolean> {
     await this.loadStoredAuth();
-    return this.isConnected && !!this.accessToken;
+    return this.isConnected && !!this.accessToken && Date.now() < this.expiresAt;
   }
 
   /**
@@ -411,7 +422,9 @@ class SpotifyService {
    * Get access token for external use
    */
   async getAccessToken(): Promise<string | null> {
-    return this.getValidToken();
+    await this.loadStoredAuth();
+    if (Date.now() >= this.expiresAt) return null;
+    return this.accessToken;
   }
 
   /**
@@ -419,7 +432,6 @@ class SpotifyService {
    */
   async disconnect() {
     this.accessToken = null;
-    this.refreshToken = null;
     this.expiresAt = 0;
     this.isConnected = false;
     await AsyncStorage.removeItem(STORAGE_KEY);
