@@ -9,7 +9,7 @@ import { SpotifyTrack, SpotifyPlaylist, SpotifyAlbum } from '../types';
 
 // Spotify API Configuration
 // Replace with your credentials from Spotify Developer Dashboard
-const SPOTIFY_CLIENT_ID = 'YOUR_SPOTIFY_CLIENT_ID';
+const SPOTIFY_CLIENT_ID = '32f987a2b6444f02b90ece924503d39f';
 const SPOTIFY_REDIRECT_URI = 'holycultureradio://spotify-callback';
 
 const SPOTIFY_AUTH_CONFIG: AuthConfiguration = {
