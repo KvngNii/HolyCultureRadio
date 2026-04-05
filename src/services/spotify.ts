@@ -134,23 +134,22 @@ function rightRotate(value: number, amount: number): number {
 function base64URLEncode(bytes: number[]): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   let result = '';
-  let i = 0;
 
-  while (i < bytes.length) {
-    const a = bytes[i++];
-    const b = i < bytes.length ? bytes[i++] : 0;
-    const c = i < bytes.length ? bytes[i++] : 0;
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i];
+    const b = i + 1 < bytes.length ? bytes[i + 1] : 0;
+    const c = i + 2 < bytes.length ? bytes[i + 2] : 0;
 
     const triplet = (a << 16) | (b << 8) | c;
 
     result += chars[(triplet >> 18) & 0x3f];
     result += chars[(triplet >> 12) & 0x3f];
-    result += i - 2 < bytes.length ? chars[(triplet >> 6) & 0x3f] : '';
-    result += i - 1 < bytes.length ? chars[triplet & 0x3f] : '';
+    result += i + 1 < bytes.length ? chars[(triplet >> 6) & 0x3f] : '';
+    result += i + 2 < bytes.length ? chars[triplet & 0x3f] : '';
   }
 
-  // Convert to URL-safe base64
-  return result.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  // Convert to URL-safe base64 (no padding)
+  return result.replace(/\+/g, '-').replace(/\//g, '_');
 }
 
 // Generate code challenge from verifier
