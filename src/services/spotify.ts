@@ -44,23 +44,13 @@ function generateRandomString(length: number): string {
   return result;
 }
 
-// SHA256 implementation for React Native
-async function sha256(message: string): Promise<ArrayBuffer> {
-  // Convert string to Uint8Array
-  const msgBuffer = new TextEncoder().encode(message);
-
-  // Use SubtleCrypto if available (some React Native environments)
-  if (typeof crypto !== 'undefined' && crypto.subtle) {
-    return await crypto.subtle.digest('SHA-256', msgBuffer);
-  }
-
-  // Fallback: Simple SHA256 implementation
-  const hashArray = await sha256Fallback(message);
-  return new Uint8Array(hashArray).buffer;
+// SHA256 implementation for React Native (no TextEncoder/crypto.subtle)
+async function sha256(message: string): Promise<number[]> {
+  return sha256Impl(message);
 }
 
-// Pure JS SHA256 fallback
-async function sha256Fallback(message: string): Promise<number[]> {
+// Pure JS SHA256 implementation
+function sha256Impl(message: string): number[] {
   const K = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -74,9 +64,10 @@ async function sha256Fallback(message: string): Promise<number[]> {
 
   let H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
 
+  // Convert string to bytes (ASCII only for PKCE verifier)
   const bytes: number[] = [];
   for (let i = 0; i < message.length; i++) {
-    bytes.push(message.charCodeAt(i));
+    bytes.push(message.charCodeAt(i) & 0xff);
   }
 
   bytes.push(0x80);
@@ -129,8 +120,8 @@ async function sha256Fallback(message: string): Promise<number[]> {
   }
 
   const result: number[] = [];
-  for (const h of H) {
-    result.push((h >>> 24) & 0xff, (h >>> 16) & 0xff, (h >>> 8) & 0xff, h & 0xff);
+  for (const hVal of H) {
+    result.push((hVal >>> 24) & 0xff, (hVal >>> 16) & 0xff, (hVal >>> 8) & 0xff, hVal & 0xff);
   }
   return result;
 }
@@ -139,30 +130,23 @@ function rightRotate(value: number, amount: number): number {
   return ((value >>> amount) | (value << (32 - amount))) >>> 0;
 }
 
-// Base64 URL encode for PKCE
-function base64URLEncode(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-
-  // Custom base64 encoding (btoa not available in RN)
+// Base64 URL encode for PKCE (accepts byte array)
+function base64URLEncode(bytes: number[]): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   let result = '';
   let i = 0;
 
-  while (i < binary.length) {
-    const a = binary.charCodeAt(i++);
-    const b = i < binary.length ? binary.charCodeAt(i++) : 0;
-    const c = i < binary.length ? binary.charCodeAt(i++) : 0;
+  while (i < bytes.length) {
+    const a = bytes[i++];
+    const b = i < bytes.length ? bytes[i++] : 0;
+    const c = i < bytes.length ? bytes[i++] : 0;
 
     const triplet = (a << 16) | (b << 8) | c;
 
     result += chars[(triplet >> 18) & 0x3f];
     result += chars[(triplet >> 12) & 0x3f];
-    result += i - 2 < binary.length ? chars[(triplet >> 6) & 0x3f] : '';
-    result += i - 1 < binary.length ? chars[triplet & 0x3f] : '';
+    result += i - 2 < bytes.length ? chars[(triplet >> 6) & 0x3f] : '';
+    result += i - 1 < bytes.length ? chars[triplet & 0x3f] : '';
   }
 
   // Convert to URL-safe base64
