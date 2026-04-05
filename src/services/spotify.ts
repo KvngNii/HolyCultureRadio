@@ -36,28 +36,12 @@ interface StoredAuth {
 
 // Generate random string for PKCE
 function generateRandomString(length: number): string {
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
   for (let i = 0; i < length; i++) {
     result += possible.charAt(Math.floor(Math.random() * possible.length));
   }
   return result;
-}
-
-// Base64 URL encode
-function base64URLEncode(str: string): string {
-  return btoa(str)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-}
-
-// SHA256 hash using simple implementation for React Native
-async function sha256(plain: string): Promise<string> {
-  // Simple hash for code challenge - using the plain verifier as challenge
-  // In production, you'd want to use a proper crypto library
-  // For S256, we need actual SHA256, but Spotify also supports 'plain' method
-  return plain;
 }
 
 class SpotifyService {
@@ -233,8 +217,9 @@ class SpotifyService {
       this.authCallback = resolve;
 
       // Generate PKCE code verifier and challenge
+      // Using 'plain' method - verifier and challenge are the same
       const codeVerifier = generateRandomString(64);
-      const codeChallenge = base64URLEncode(codeVerifier);
+      const codeChallenge = codeVerifier;
 
       // Store verifier for token exchange
       await AsyncStorage.setItem(VERIFIER_KEY, codeVerifier);
