@@ -58,7 +58,23 @@ interface SpotifyAlbumData {
   total_tracks: number;
 }
 
-const genres = ['All', 'Gospel', 'CCM', 'Christian Hip-Hop', 'Worship', 'R&B'];
+const genres = [
+  { name: 'All', query: 'christian gospel worship' },
+  { name: 'Gospel', query: 'gospel music' },
+  { name: 'CCM', query: 'contemporary christian music' },
+  { name: 'Christian Hip-Hop', query: 'christian hip hop rap' },
+  { name: 'Worship', query: 'worship praise' },
+  { name: 'R&B', query: 'christian r&b soul' },
+];
+
+const moods = [
+  { name: 'Worship', color: '#C41E3A', emoji: '🙏', query: 'worship praise songs' },
+  { name: 'Uplifting', color: '#FF8C00', emoji: '☀️', query: 'uplifting christian inspirational' },
+  { name: 'Peaceful', color: '#4169E1', emoji: '🕊️', query: 'peaceful christian relaxing instrumental' },
+  { name: 'Energetic', color: '#32CD32', emoji: '⚡', query: 'christian rock energetic praise' },
+  { name: 'Reflective', color: '#9370DB', emoji: '💭', query: 'christian meditation contemplative' },
+  { name: 'Joyful', color: '#FFD700', emoji: '😊', query: 'joyful praise celebration christian' },
+];
 
 export default function MusicScreen() {
   const colors = useColors();
@@ -66,6 +82,8 @@ export default function MusicScreen() {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedGenre, setSelectedGenre] = useState('All');
+  const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  const [currentQuery, setCurrentQuery] = useState('christian gospel worship');
   const [playlists, setPlaylists] = useState<SpotifyPlaylistData[]>([]);
   const [tracks, setTracks] = useState<SpotifyTrackData[]>([]);
   const [albums, setAlbums] = useState<SpotifyAlbumData[]>([]);
@@ -113,11 +131,8 @@ export default function MusicScreen() {
       const user = await spotifyService.getCurrentUser();
       setUserProfile(user);
 
-      // Fetch Christian/Gospel music based on selected genre
-      const genreQuery = selectedGenre === 'All' ? 'christian gospel worship' : selectedGenre.toLowerCase();
-
-      // Fetch tracks
-      const searchResult = await spotifyService.searchChristianMusic(genreQuery, 20);
+      // Fetch tracks based on current query
+      const searchResult = await spotifyService.searchChristianMusic(currentQuery, 20);
       if (searchResult?.tracks?.items) {
         setTracks(searchResult.tracks.items);
       }
@@ -150,14 +165,28 @@ export default function MusicScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedGenre]);
+  }, [currentQuery]);
 
-  // Reload when genre changes
+  // Reload when query changes
   useEffect(() => {
     if (isConnected) {
       loadSpotifyData();
     }
-  }, [selectedGenre, isConnected, loadSpotifyData]);
+  }, [currentQuery, isConnected, loadSpotifyData]);
+
+  // Handle genre selection
+  const handleGenreSelect = (genre: typeof genres[0]) => {
+    setSelectedGenre(genre.name);
+    setSelectedMood(null);
+    setCurrentQuery(genre.query);
+  };
+
+  // Handle mood selection
+  const handleMoodSelect = (mood: typeof moods[0]) => {
+    setSelectedMood(mood.name);
+    setSelectedGenre(''); // Clear genre selection
+    setCurrentQuery(mood.query);
+  };
 
   const disconnectSpotify = async () => {
     Alert.alert(
@@ -434,20 +463,20 @@ export default function MusicScreen() {
       >
         {genres.map((genre) => (
           <TouchableOpacity
-            key={genre}
+            key={genre.name}
             style={[
               styles.genrePill,
-              selectedGenre === genre && styles.genrePillActive,
+              selectedGenre === genre.name && styles.genrePillActive,
             ]}
-            onPress={() => setSelectedGenre(genre)}
+            onPress={() => handleGenreSelect(genre)}
           >
             <Text
               style={[
                 styles.genreText,
-                selectedGenre === genre && styles.genreTextActive,
+                selectedGenre === genre.name && styles.genreTextActive,
               ]}
             >
-              {genre}
+              {genre.name}
             </Text>
           </TouchableOpacity>
         ))}
@@ -475,7 +504,7 @@ export default function MusicScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>
-              {selectedGenre === 'All' ? 'Christian Music' : selectedGenre}
+              {selectedMood ? `${selectedMood} Music` : (selectedGenre === 'All' ? 'Christian Music' : selectedGenre)}
             </Text>
           </View>
           {tracks.slice(0, 10).map((track, index) => renderTrackItem(track, index))}
@@ -503,21 +532,15 @@ export default function MusicScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Browse by Mood</Text>
         <View style={styles.moodGrid}>
-          {[
-            { name: 'Worship', color: '#C41E3A', emoji: '🙏', query: 'worship' },
-            { name: 'Uplifting', color: '#FF8C00', emoji: '☀️', query: 'uplifting christian' },
-            { name: 'Peaceful', color: '#4169E1', emoji: '🕊️', query: 'peaceful worship' },
-            { name: 'Energetic', color: '#32CD32', emoji: '⚡', query: 'christian rock' },
-            { name: 'Reflective', color: '#9370DB', emoji: '💭', query: 'christian meditation' },
-            { name: 'Joyful', color: '#FFD700', emoji: '😊', query: 'joyful praise' },
-          ].map((mood) => (
+          {moods.map((mood) => (
             <TouchableOpacity
               key={mood.name}
-              style={[styles.moodCard, { backgroundColor: mood.color }]}
-              onPress={() => {
-                // Search for this mood
-                setSelectedGenre(mood.name);
-              }}
+              style={[
+                styles.moodCard,
+                { backgroundColor: mood.color },
+                selectedMood === mood.name && styles.moodCardActive,
+              ]}
+              onPress={() => handleMoodSelect(mood)}
             >
               <Text style={styles.moodEmoji}>{mood.emoji}</Text>
               <Text style={styles.moodName}>{mood.name}</Text>
@@ -890,6 +913,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderRadius: spacing.cardBorderRadius,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  moodCardActive: {
+    borderWidth: 3,
+    borderColor: '#fff',
+    transform: [{ scale: 1.05 }],
   },
   moodEmoji: {
     fontSize: 32,
