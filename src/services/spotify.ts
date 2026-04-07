@@ -393,7 +393,7 @@ class SpotifyService {
    */
   async search(query: string, types: string[] = ['track'], limit = 20) {
     const typeParam = types.join(',');
-    return this.apiRequest<any>(`/search?q=${encodeURIComponent(query)}&type=${typeParam}&limit=${limit}`);
+    return this.apiRequest<any>(`/search?q=${encodeURIComponent(query)}&type=${typeParam}&limit=${limit}&market=US`);
   }
 
   /**
@@ -405,7 +405,8 @@ class SpotifyService {
   async searchChristianMusic(query = '', limit = 30) {
     const searchQuery = query || 'christian gospel worship';
     console.log('[Spotify] searchChristianMusic called with query:', searchQuery);
-    const result = await this.apiRequest<any>(`/search?q=${encodeURIComponent(searchQuery)}&type=track&limit=${limit}`);
+    // Add market=US to ensure we get results (tracks are market-restricted)
+    const result = await this.apiRequest<any>(`/search?q=${encodeURIComponent(searchQuery)}&type=track&limit=${limit}&market=US`);
     console.log('[Spotify] searchChristianMusic result:', result?.tracks?.items?.length || 0, 'tracks found');
     return result;
   }
@@ -414,7 +415,7 @@ class SpotifyService {
    * Search worship music
    */
   async searchWorshipMusic(limit = 30) {
-    return this.apiRequest<any>(`/search?q=${encodeURIComponent('worship music')}&type=track,playlist&limit=${limit}`);
+    return this.apiRequest<any>(`/search?q=${encodeURIComponent('worship music')}&type=track,playlist&limit=${limit}&market=US`);
   }
 
   /**
