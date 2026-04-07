@@ -20,8 +20,8 @@ import {
 } from 'react-native';
 import { typography, spacing, shadows } from '../theme';
 import { useColors } from '../hooks/useColors';
-import TrackPlayer, { usePlaybackState, State, Capability } from 'react-native-track-player';
 import { spotifyService } from '../services/spotify';
+import { spotifyPlayer } from '../services/spotifyPlayer';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - spacing.screenPadding * 2 - spacing.md) / 2;
@@ -93,21 +93,27 @@ export default function MusicScreen() {
   const [albums, setAlbums] = useState<SpotifyAlbumData[]>([]);
   const [recentTracks, setRecentTracks] = useState<SpotifyTrackData[]>([]);
   const [currentlyPlaying, setCurrentlyPlaying] = useState<SpotifyTrackData | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
 
-  const playbackState = usePlaybackState();
-  const isActuallyPlaying = playbackState.state === State.Playing;
-
-  // Set up TrackPlayer once on mount
+  // Listen to Spotify remote player state changes
   useEffect(() => {
-    TrackPlayer.setupPlayer().then(() =>
-      TrackPlayer.updateOptions({
-        capabilities: [Capability.Play, Capability.Pause, Capability.Stop],
-        compactCapabilities: [Capability.Play, Capability.Pause],
-      })
-    ).catch(() => {
-      // Player already initialized — safe to ignore
+    const unsub = spotifyPlayer.onPlayerStateChanged((state) => {
+      setIsPlaying(!state.isPaused);
+      // Sync currently playing track info from the remote if available
+      if (state.track?.uri) {
+        setCurrentlyPlaying((prev) =>
+          prev?.uri === state.track.uri ? prev : prev
+        );
+      }
     });
+    const unsubDisconnect = spotifyPlayer.onRemoteDisconnected(() => {
+      setIsPlaying(false);
+    });
+    return () => {
+      unsub();
+      unsubDisconnect();
+    };
   }, []);
 
   // Check authentication on mount
@@ -115,10 +121,18 @@ export default function MusicScreen() {
     checkAuth();
   }, []);
 
+  const connectRemote = async () => {
+    const token = await spotifyService.getAccessToken();
+    if (token) {
+      await spotifyPlayer.ensureConnected(token);
+    }
+  };
+
   const checkAuth = async () => {
     const authenticated = await spotifyService.isAuthenticated();
     setIsConnected(authenticated);
     if (authenticated) {
+      await connectRemote();
       loadSpotifyData(true); // Initial load
     } else {
       setIsLoading(false);
@@ -131,6 +145,7 @@ export default function MusicScreen() {
       const success = await spotifyService.login();
       if (success) {
         setIsConnected(true);
+        await connectRemote();
         await loadSpotifyData(true); // Initial load
       } else {
         Alert.alert('Connection Failed', 'Could not connect to Spotify. Please try again.');
@@ -266,46 +281,45 @@ export default function MusicScreen() {
   };
 
   const playTrack = async (track: SpotifyTrackData) => {
-    if (!track.preview_url) {
-      Alert.alert(
-        'No Preview Available',
-        'This track has no in-app preview. Open it in the Spotify app?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Open Spotify', onPress: () => Linking.openURL(track.uri) },
-        ]
-      );
-      return;
+    if (!spotifyPlayer.isConnected) {
+      const token = await spotifyService.getAccessToken();
+      if (!token) return;
+      const connected = await spotifyPlayer.connect(token);
+      if (!connected) {
+        Alert.alert(
+          'Spotify Not Found',
+          'Make sure the Spotify app is installed on your device to play full songs.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
     }
 
-    // If tapping the currently playing track, toggle play/pause
+    // Tapping the currently playing track toggles play/pause
     if (currentlyPlaying?.id === track.id) {
-      if (isActuallyPlaying) {
-        await TrackPlayer.pause();
+      if (isPlaying) {
+        await spotifyPlayer.pause();
       } else {
-        await TrackPlayer.play();
+        await spotifyPlayer.resume();
       }
       return;
     }
 
-    await TrackPlayer.reset();
-    await TrackPlayer.add({
-      id: track.id,
-      url: track.preview_url,
-      title: track.name,
-      artist: track.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
-      artwork: track.album?.images?.[0]?.url,
-      duration: track.duration_ms / 1000,
-    });
-    await TrackPlayer.play();
-    setCurrentlyPlaying(track);
+    try {
+      await spotifyPlayer.playUri(track.uri);
+      setCurrentlyPlaying(track);
+      setIsPlaying(true);
+    } catch (error) {
+      console.error('[MusicScreen] playUri error:', error);
+      Alert.alert('Playback Error', 'Could not play this track. Make sure Spotify Premium is active.');
+    }
   };
 
   const togglePlayPause = async () => {
-    if (isActuallyPlaying) {
-      await TrackPlayer.pause();
+    if (isPlaying) {
+      await spotifyPlayer.pause();
     } else {
-      await TrackPlayer.play();
+      await spotifyPlayer.resume();
     }
   };
 
@@ -375,17 +389,17 @@ export default function MusicScreen() {
   const renderTrackItem = (track: SpotifyTrackData, index: number) => {
     const imageUrl = getImageUrl(track.album?.images, 2);
     const isSelected = currentlyPlaying?.id === track.id;
-    const isPlaying = isSelected && isActuallyPlaying;
+    const isTrackPlaying = isSelected && isPlaying;
 
     return (
       <TouchableOpacity
         key={track.id}
-        style={[styles.trackItem, isPlaying && styles.trackItemPlaying]}
+        style={[styles.trackItem, isSelected && styles.trackItemPlaying]}
         onPress={() => playTrack(track)}
         activeOpacity={0.8}
       >
         <Text style={[styles.trackNumber, isSelected && styles.trackNumberPlaying]}>
-          {isPlaying ? '▶' : isSelected ? '⏸' : index + 1}
+          {isTrackPlaying ? '▶' : isSelected ? '⏸' : index + 1}
         </Text>
         {imageUrl ? (
           <Image source={{ uri: imageUrl }} style={styles.trackImage} />
@@ -541,7 +555,7 @@ export default function MusicScreen() {
             </View>
           )}
           <View style={styles.nowPlayingInfo}>
-            <Text style={styles.nowPlayingLabel}>NOW PLAYING • 30s PREVIEW</Text>
+            <Text style={styles.nowPlayingLabel}>NOW PLAYING</Text>
             <Text style={styles.nowPlayingTitle} numberOfLines={1}>
               {currentlyPlaying.name}
             </Text>
@@ -551,7 +565,7 @@ export default function MusicScreen() {
           </View>
           <TouchableOpacity onPress={togglePlayPause} style={styles.nowPlayingControl}>
             <Text style={styles.nowPlayingControlText}>
-              {isActuallyPlaying ? '⏸' : '▶'}
+              {isPlaying ? '⏸' : '▶'}
             </Text>
           </TouchableOpacity>
         </View>

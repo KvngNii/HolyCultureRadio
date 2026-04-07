@@ -13,6 +13,7 @@ const SPOTIFY_CLIENT_ID = '32f987a2b6444f02b90ece924503d39f';
 const SPOTIFY_REDIRECT_URI = 'holycultureradio://spotify-callback';
 const SPOTIFY_SCOPES = [
   'streaming',
+  'app-remote-control',
   'user-read-email',
   'user-read-private',
   'user-read-playback-state',
@@ -370,6 +371,19 @@ class SpotifyService {
       console.error('[Spotify API] Fetch error:', error);
       return null;
     }
+  }
+
+  /**
+   * Returns the current access token (for use with react-native-spotify-remote)
+   */
+  async getAccessToken(): Promise<string | null> {
+    await this.ensureAuthLoaded();
+    if (this.accessToken && Date.now() < this.expiresAt - 60000) {
+      return this.accessToken;
+    }
+    // Token expired — try to refresh
+    const refreshed = await this.refreshAccessToken();
+    return refreshed ? this.accessToken : null;
   }
 
   /**
