@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   Image,
   Linking,
+  TextInput,
 } from 'react-native';
 import { typography, spacing, shadows } from '../theme';
 import { useColors } from '../hooks/useColors';
@@ -84,6 +85,8 @@ export default function MusicScreen() {
   const [selectedGenre, setSelectedGenre] = useState('All');
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [currentQuery, setCurrentQuery] = useState('christian gospel worship');
+  const [searchText, setSearchText] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
   const [playlists, setPlaylists] = useState<SpotifyPlaylistData[]>([]);
   const [tracks, setTracks] = useState<SpotifyTrackData[]>([]);
   const [albums, setAlbums] = useState<SpotifyAlbumData[]>([]);
@@ -185,6 +188,8 @@ export default function MusicScreen() {
   const handleGenreSelect = (genre: typeof genres[0]) => {
     setSelectedGenre(genre.name);
     setSelectedMood(null);
+    setSearchText(''); // Clear search
+    setIsSearching(false);
     setCurrentQuery(genre.query);
   };
 
@@ -192,7 +197,41 @@ export default function MusicScreen() {
   const handleMoodSelect = (mood: typeof moods[0]) => {
     setSelectedMood(mood.name);
     setSelectedGenre(''); // Clear genre selection
+    setSearchText(''); // Clear search
+    setIsSearching(false);
     setCurrentQuery(mood.query);
+  };
+
+  // Handle search
+  const handleSearch = async () => {
+    if (!searchText.trim()) return;
+
+    setIsSearching(true);
+    setSelectedGenre('');
+    setSelectedMood(null);
+    setIsLoading(true);
+
+    try {
+      const searchResult = await spotifyService.search(searchText.trim(), ['track'], 30);
+      if (searchResult?.tracks?.items) {
+        setTracks(searchResult.tracks.items);
+      } else {
+        setTracks([]);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      setTracks([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Clear search and return to default
+  const clearSearch = () => {
+    setSearchText('');
+    setIsSearching(false);
+    setSelectedGenre('All');
+    setCurrentQuery('christian gospel worship');
   };
 
   const disconnectSpotify = async () => {
@@ -436,6 +475,34 @@ export default function MusicScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputWrapper}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search songs, artists..."
+            placeholderTextColor={colors.textMuted}
+            value={searchText}
+            onChangeText={setSearchText}
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+              <Text style={styles.clearButtonText}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity
+          style={[styles.searchButton, !searchText.trim() && styles.searchButtonDisabled]}
+          onPress={handleSearch}
+          disabled={!searchText.trim()}
+        >
+          <Text style={styles.searchButtonText}>Search</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Currently Playing */}
       {currentlyPlaying && (
         <View style={styles.nowPlayingBanner}>
@@ -510,7 +577,11 @@ export default function MusicScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>
-            {selectedMood ? `${selectedMood} Music` : (selectedGenre === 'All' ? 'Christian Music' : selectedGenre)}
+            {isSearching
+              ? `Search Results for "${searchText}"`
+              : selectedMood
+                ? `${selectedMood} Music`
+                : (selectedGenre === 'All' ? 'Christian Music' : selectedGenre)}
           </Text>
         </View>
         {isLoading ? (
@@ -863,6 +934,54 @@ const createStyles = (colors: any) => StyleSheet.create({
   disconnectText: {
     ...typography.label,
     color: colors.textMuted,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.screenPadding,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  searchInputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.backgroundSecondary,
+    borderRadius: 25,
+    paddingHorizontal: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  searchIcon: {
+    fontSize: 16,
+    marginRight: spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    color: colors.textPrimary,
+    fontSize: 16,
+  },
+  clearButton: {
+    padding: spacing.xs,
+  },
+  clearButtonText: {
+    color: colors.textMuted,
+    fontSize: 16,
+  },
+  searchButton: {
+    backgroundColor: '#1DB954',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 20,
+  },
+  searchButtonDisabled: {
+    opacity: 0.5,
+  },
+  searchButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
   },
   genreContainer: {
     maxHeight: 50,
