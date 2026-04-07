@@ -360,8 +360,9 @@ class SpotifyService {
       const data = await response.json();
       console.log('[Spotify API] Response data keys:', data ? Object.keys(data) : 'null');
 
-      if (data?.error) {
-        console.error('[Spotify API] Error in response:', data.error);
+      if (!response.ok || data?.error) {
+        console.error('[Spotify API] Error in response:', data?.error ?? { status: response.status });
+        return null;
       }
 
       return data;
@@ -402,7 +403,7 @@ class SpotifyService {
   /**
    * Search for Christian/Gospel music
    */
-  async searchChristianMusic(query = '', limit = 30) {
+  async searchChristianMusic(query = '', limit = 20) {
     const searchQuery = query || 'christian gospel worship';
     console.log('[Spotify] searchChristianMusic called with query:', searchQuery);
     // Add market=US to ensure we get results (tracks are market-restricted)
