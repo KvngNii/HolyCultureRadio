@@ -100,7 +100,7 @@ export default function MusicScreen() {
     const authenticated = await spotifyService.isAuthenticated();
     setIsConnected(authenticated);
     if (authenticated) {
-      loadSpotifyData();
+      loadSpotifyData(true); // Initial load
     } else {
       setIsLoading(false);
     }
@@ -112,7 +112,7 @@ export default function MusicScreen() {
       const success = await spotifyService.login();
       if (success) {
         setIsConnected(true);
-        await loadSpotifyData();
+        await loadSpotifyData(true); // Initial load
       } else {
         Alert.alert('Connection Failed', 'Could not connect to Spotify. Please try again.');
       }
@@ -124,41 +124,48 @@ export default function MusicScreen() {
     }
   };
 
-  const loadSpotifyData = useCallback(async () => {
+  const loadSpotifyData = useCallback(async (isInitialLoad = false) => {
     setIsLoading(true);
     try {
-      // Fetch user profile
-      const user = await spotifyService.getCurrentUser();
-      setUserProfile(user);
+      // Only fetch user profile on initial load
+      if (isInitialLoad) {
+        const user = await spotifyService.getCurrentUser();
+        setUserProfile(user);
 
-      // Fetch tracks based on current query
-      const searchResult = await spotifyService.searchChristianMusic(currentQuery, 20);
+        // Fetch featured playlists (only on initial load)
+        const featuredResult = await spotifyService.getFeaturedPlaylists(10);
+        if (featuredResult?.playlists?.items) {
+          setPlaylists(featuredResult.playlists.items);
+        }
+
+        // Fetch new releases (only on initial load)
+        const releasesResult = await spotifyService.getNewReleases(10);
+        if (releasesResult?.albums?.items) {
+          setAlbums(releasesResult.albums.items);
+        }
+
+        // Fetch recently played (only on initial load)
+        const recentResult = await spotifyService.getRecentlyPlayed(10);
+        if (recentResult?.items) {
+          setRecentTracks(recentResult.items.map((item: any) => item.track));
+        }
+
+        // Get current playback
+        const playbackState = await spotifyService.getPlaybackState();
+        if (playbackState?.item) {
+          setCurrentlyPlaying(playbackState.item);
+        }
+      }
+
+      // Always fetch tracks based on current query
+      console.log('Searching for:', currentQuery);
+      const searchResult = await spotifyService.searchChristianMusic(currentQuery, 30);
+      console.log('Search result:', searchResult?.tracks?.items?.length || 0, 'tracks');
+
       if (searchResult?.tracks?.items) {
         setTracks(searchResult.tracks.items);
-      }
-
-      // Fetch featured playlists
-      const featuredResult = await spotifyService.getFeaturedPlaylists(10);
-      if (featuredResult?.playlists?.items) {
-        setPlaylists(featuredResult.playlists.items);
-      }
-
-      // Fetch new releases (albums)
-      const releasesResult = await spotifyService.getNewReleases(10);
-      if (releasesResult?.albums?.items) {
-        setAlbums(releasesResult.albums.items);
-      }
-
-      // Fetch recently played
-      const recentResult = await spotifyService.getRecentlyPlayed(10);
-      if (recentResult?.items) {
-        setRecentTracks(recentResult.items.map((item: any) => item.track));
-      }
-
-      // Get current playback
-      const playbackState = await spotifyService.getPlaybackState();
-      if (playbackState?.item) {
-        setCurrentlyPlaying(playbackState.item);
+      } else {
+        setTracks([]);
       }
     } catch (error) {
       console.error('Error loading Spotify data:', error);
@@ -167,12 +174,12 @@ export default function MusicScreen() {
     }
   }, [currentQuery]);
 
-  // Reload when query changes
+  // Reload tracks when query changes
   useEffect(() => {
-    if (isConnected) {
-      loadSpotifyData();
+    if (isConnected && currentQuery) {
+      loadSpotifyData(false); // Not initial load, just refresh tracks
     }
-  }, [currentQuery, isConnected, loadSpotifyData]);
+  }, [currentQuery, isConnected]);
 
   // Handle genre selection
   const handleGenreSelect = (genre: typeof genres[0]) => {

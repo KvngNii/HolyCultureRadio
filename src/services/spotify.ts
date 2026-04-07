@@ -350,10 +350,11 @@ class SpotifyService {
   /**
    * Search for Christian/Gospel music
    */
+  /**
+   * Search for Christian/Gospel music
+   */
   async searchChristianMusic(query = '', limit = 30) {
-    const searchQuery = query
-      ? `${query} genre:christian OR genre:gospel`
-      : 'genre:christian OR genre:gospel';
+    const searchQuery = query || 'christian gospel worship';
     return this.apiRequest<any>(`/search?q=${encodeURIComponent(searchQuery)}&type=track&limit=${limit}`);
   }
 
