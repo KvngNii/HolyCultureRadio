@@ -212,15 +212,22 @@ export default function MusicScreen() {
     setIsLoading(true);
 
     try {
+      console.log('Searching for:', searchText.trim());
       const searchResult = await spotifyService.search(searchText.trim(), ['track'], 30);
-      if (searchResult?.tracks?.items) {
+      console.log('Search result:', JSON.stringify(searchResult, null, 2));
+
+      if (searchResult?.tracks?.items && searchResult.tracks.items.length > 0) {
+        console.log('Found', searchResult.tracks.items.length, 'tracks');
         setTracks(searchResult.tracks.items);
       } else {
+        console.log('No tracks found in search result');
         setTracks([]);
+        Alert.alert('No Results', `No tracks found for "${searchText.trim()}". Try a different search term.`);
       }
     } catch (error) {
       console.error('Search error:', error);
       setTracks([]);
+      Alert.alert('Search Error', 'Failed to search. Please try again.');
     } finally {
       setIsLoading(false);
     }
