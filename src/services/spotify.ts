@@ -528,15 +528,38 @@ class SpotifyService {
   /**
    * Start playback
    */
-  async play(uri?: string, contextUri?: string) {
+  async play(uri?: string, contextUri?: string): Promise<boolean> {
     const body: any = {};
     if (contextUri) body.context_uri = contextUri;
     if (uri) body.uris = [uri];
 
-    return this.apiRequest('/me/player/play', {
+    // Try playing directly first
+    const result = await this.apiRequest('/me/player/play', {
       method: 'PUT',
       body: JSON.stringify(body),
     });
+
+    // null means error — check for available devices and retry
+    if (result === null) {
+      const devicesResult = await this.apiRequest<any>('/me/player/devices');
+      const devices: any[] = devicesResult?.devices ?? [];
+      if (devices.length === 0) return false;
+
+      // Transfer playback to the first available device, then play
+      const deviceId = devices[0].id;
+      await this.apiRequest('/me/player', {
+        method: 'PUT',
+        body: JSON.stringify({ device_ids: [deviceId], play: false }),
+      });
+
+      const retry = await this.apiRequest('/me/player/play', {
+        method: 'PUT',
+        body: JSON.stringify({ ...body, device_id: deviceId }),
+      });
+      return retry !== null;
+    }
+
+    return true;
   }
 
   /**

@@ -250,31 +250,18 @@ export default function MusicScreen() {
   };
 
   const playTrack = async (track: SpotifyTrackData) => {
-    try {
-      // Try to play via Spotify Connect
-      await spotifyService.play(track.uri);
+    const success = await spotifyService.play(track.uri);
+    if (success) {
       setCurrentlyPlaying(track);
-    } catch (error) {
-      // If no active device, try preview URL or open Spotify
-      if (track.preview_url) {
-        Alert.alert(
-          'Play Preview',
-          'No active Spotify device found. Would you like to play a 30-second preview or open in Spotify?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Spotify', onPress: () => Linking.openURL(track.uri) },
-          ]
-        );
-      } else {
-        Alert.alert(
-          'Open in Spotify',
-          'Open this track in the Spotify app?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open', onPress: () => Linking.openURL(track.uri) },
-          ]
-        );
-      }
+    } else {
+      Alert.alert(
+        'Open in Spotify',
+        'No active Spotify device found. Open this track in the Spotify app?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Spotify', onPress: () => Linking.openURL(track.uri) },
+        ]
+      );
     }
   };
 
