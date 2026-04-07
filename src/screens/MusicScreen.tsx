@@ -212,15 +212,12 @@ export default function MusicScreen() {
     setIsLoading(true);
 
     try {
-      console.log('Searching for:', searchText.trim());
-      const searchResult = await spotifyService.search(searchText.trim(), ['track'], 30);
-      console.log('Search result:', JSON.stringify(searchResult, null, 2));
+      // Use the same search method that works for genres/moods
+      const searchResult = await spotifyService.searchChristianMusic(searchText.trim(), 30);
 
       if (searchResult?.tracks?.items && searchResult.tracks.items.length > 0) {
-        console.log('Found', searchResult.tracks.items.length, 'tracks');
         setTracks(searchResult.tracks.items);
       } else {
-        console.log('No tracks found in search result');
         setTracks([]);
         Alert.alert('No Results', `No tracks found for "${searchText.trim()}". Try a different search term.`);
       }
