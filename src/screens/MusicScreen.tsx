@@ -162,7 +162,7 @@ export default function MusicScreen() {
 
       // Always fetch tracks based on current query
       console.log('Searching for:', currentQuery);
-      const searchResult = await spotifyService.searchChristianMusic(currentQuery, 30);
+      const searchResult = await spotifyService.searchChristianMusic(currentQuery, 20);
       console.log('Search result:', searchResult?.tracks?.items?.length || 0, 'tracks');
 
       if (searchResult?.tracks?.items) {
