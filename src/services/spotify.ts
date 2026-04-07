@@ -80,10 +80,20 @@ class SpotifyService {
   private isConnected: boolean = false;
   private authCallback: ((success: boolean) => void) | null = null;
   private codeVerifier: string | null = null;
+  private authLoadPromise: Promise<void> | null = null;
 
   constructor() {
-    this.loadStoredAuth();
+    // Store the promise so we can await it later
+    this.authLoadPromise = this.loadStoredAuth();
     this.setupDeepLinkListener();
+  }
+
+  // Wait for initial auth to be loaded
+  private async ensureAuthLoaded(): Promise<void> {
+    if (this.authLoadPromise) {
+      await this.authLoadPromise;
+      this.authLoadPromise = null;
+    }
   }
 
   private setupDeepLinkListener() {
@@ -169,24 +179,35 @@ class SpotifyService {
 
   private async loadStoredAuth() {
     try {
+      console.log('[Spotify] Loading stored auth...');
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       if (stored) {
         const auth: StoredAuth = JSON.parse(stored);
+        console.log('[Spotify] Found stored auth, expires at:', new Date(auth.expiresAt).toISOString());
+        console.log('[Spotify] Current time:', new Date().toISOString());
+        console.log('[Spotify] Token valid:', auth.expiresAt > Date.now());
+
         if (auth.expiresAt > Date.now()) {
           this.accessToken = auth.accessToken;
           this.refreshToken = auth.refreshToken;
           this.expiresAt = auth.expiresAt;
           this.isConnected = true;
+          console.log('[Spotify] Token loaded successfully');
         } else if (auth.refreshToken) {
           // Token expired but we have refresh token
+          console.log('[Spotify] Token expired, attempting refresh...');
           this.refreshToken = auth.refreshToken;
-          await this.refreshAccessToken();
+          const refreshed = await this.refreshAccessToken();
+          console.log('[Spotify] Refresh result:', refreshed);
         } else {
+          console.log('[Spotify] No refresh token, clearing auth');
           await AsyncStorage.removeItem(STORAGE_KEY);
         }
+      } else {
+        console.log('[Spotify] No stored auth found');
       }
     } catch (error) {
-      console.error('Error loading stored auth:', error);
+      console.error('[Spotify] Error loading stored auth:', error);
     }
   }
 
@@ -283,20 +304,36 @@ class SpotifyService {
    * Make authenticated API requests to Spotify
    */
   private async apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
+    console.log('[Spotify API] Request to:', endpoint);
+
+    // Ensure initial auth load is complete
+    await this.ensureAuthLoaded();
+
     if (!this.accessToken) {
+      console.log('[Spotify API] No token, loading stored auth...');
       await this.loadStoredAuth();
     }
 
-    if (!this.accessToken) return null;
+    if (!this.accessToken) {
+      console.log('[Spotify API] Still no token after loading - not authenticated');
+      return null;
+    }
 
     // Check if token expired and refresh
     if (Date.now() >= this.expiresAt - 60000) {
+      console.log('[Spotify API] Token expired or expiring soon, refreshing...');
       const refreshed = await this.refreshAccessToken();
-      if (!refreshed) return null;
+      if (!refreshed) {
+        console.log('[Spotify API] Token refresh failed');
+        return null;
+      }
     }
 
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, {
+      const url = `${API_BASE}${endpoint}`;
+      console.log('[Spotify API] Fetching:', url);
+
+      const response = await fetch(url, {
         ...options,
         headers: {
           Authorization: `Bearer ${this.accessToken}`,
@@ -305,7 +342,10 @@ class SpotifyService {
         },
       });
 
+      console.log('[Spotify API] Response status:', response.status);
+
       if (response.status === 401) {
+        console.log('[Spotify API] 401 Unauthorized, refreshing token...');
         const refreshed = await this.refreshAccessToken();
         if (refreshed) {
           return this.apiRequest(endpoint, options);
@@ -317,9 +357,16 @@ class SpotifyService {
         return null;
       }
 
-      return await response.json();
+      const data = await response.json();
+      console.log('[Spotify API] Response data keys:', data ? Object.keys(data) : 'null');
+
+      if (data?.error) {
+        console.error('[Spotify API] Error in response:', data.error);
+      }
+
+      return data;
     } catch (error) {
-      console.error('Spotify API error:', error);
+      console.error('[Spotify API] Fetch error:', error);
       return null;
     }
   }
@@ -328,8 +375,10 @@ class SpotifyService {
    * Check if authenticated
    */
   async isAuthenticated(): Promise<boolean> {
-    await this.loadStoredAuth();
-    return this.isConnected && !!this.accessToken;
+    await this.ensureAuthLoaded();
+    const authenticated = this.isConnected && !!this.accessToken;
+    console.log('[Spotify] isAuthenticated:', authenticated, 'hasToken:', !!this.accessToken, 'isConnected:', this.isConnected);
+    return authenticated;
   }
 
   /**
@@ -355,7 +404,10 @@ class SpotifyService {
    */
   async searchChristianMusic(query = '', limit = 30) {
     const searchQuery = query || 'christian gospel worship';
-    return this.apiRequest<any>(`/search?q=${encodeURIComponent(searchQuery)}&type=track&limit=${limit}`);
+    console.log('[Spotify] searchChristianMusic called with query:', searchQuery);
+    const result = await this.apiRequest<any>(`/search?q=${encodeURIComponent(searchQuery)}&type=track&limit=${limit}`);
+    console.log('[Spotify] searchChristianMusic result:', result?.tracks?.items?.length || 0, 'tracks found');
+    return result;
   }
 
   /**
