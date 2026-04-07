@@ -406,8 +406,7 @@ class SpotifyService {
   async searchChristianMusic(query = '', limit = 20) {
     const searchQuery = query || 'christian gospel worship';
     console.log('[Spotify] searchChristianMusic called with query:', searchQuery);
-    // Add market=US to ensure we get results (tracks are market-restricted)
-    const result = await this.apiRequest<any>(`/search?q=${encodeURIComponent(searchQuery)}&type=track&limit=${limit}&market=US`);
+    const result = await this.apiRequest<any>(`/search?q=${encodeURIComponent(searchQuery)}&type=track&limit=${limit}`);
     console.log('[Spotify] searchChristianMusic result:', result?.tracks?.items?.length || 0, 'tracks found');
     return result;
   }
