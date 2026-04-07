@@ -506,17 +506,26 @@ export default function MusicScreen() {
         </View>
       )}
 
-      {/* Christian Music */}
-      {tracks.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>
-              {selectedMood ? `${selectedMood} Music` : (selectedGenre === 'All' ? 'Christian Music' : selectedGenre)}
-            </Text>
-          </View>
-          {tracks.slice(0, 10).map((track, index) => renderTrackItem(track, index))}
+      {/* Track List */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            {selectedMood ? `${selectedMood} Music` : (selectedGenre === 'All' ? 'Christian Music' : selectedGenre)}
+          </Text>
         </View>
-      )}
+        {isLoading ? (
+          <View style={styles.trackLoadingContainer}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.trackLoadingText}>Loading tracks...</Text>
+          </View>
+        ) : tracks.length > 0 ? (
+          tracks.slice(0, 15).map((track, index) => renderTrackItem(track, index))
+        ) : (
+          <View style={styles.noTracksContainer}>
+            <Text style={styles.noTracksText}>No tracks found. Try a different genre or mood.</Text>
+          </View>
+        )}
+      </View>
 
       {/* New Releases */}
       {albums.length > 0 && (
@@ -605,6 +614,25 @@ const createStyles = (colors: any) => StyleSheet.create({
     ...typography.body,
     color: colors.textMuted,
     marginTop: spacing.md,
+  },
+  trackLoadingContainer: {
+    paddingVertical: spacing.xl,
+    alignItems: 'center',
+  },
+  trackLoadingText: {
+    ...typography.body,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+  },
+  noTracksContainer: {
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.screenPadding,
+    alignItems: 'center',
+  },
+  noTracksText: {
+    ...typography.body,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   placeholderImage: {
     backgroundColor: colors.backgroundSecondary,
