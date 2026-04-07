@@ -135,18 +135,6 @@ export default function MusicScreen() {
         const user = await spotifyService.getCurrentUser();
         setUserProfile(user);
 
-        // Fetch featured playlists (only on initial load)
-        const featuredResult = await spotifyService.getFeaturedPlaylists(10);
-        if (featuredResult?.playlists?.items) {
-          setPlaylists(featuredResult.playlists.items);
-        }
-
-        // Fetch new releases (only on initial load)
-        const releasesResult = await spotifyService.getNewReleases(10);
-        if (releasesResult?.albums?.items) {
-          setAlbums(releasesResult.albums.items);
-        }
-
         // Fetch recently played (only on initial load)
         const recentResult = await spotifyService.getRecentlyPlayed(10);
         if (recentResult?.items) {
