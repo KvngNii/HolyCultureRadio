@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { typography, spacing, shadows } from '../theme';
 import { useColors } from '../hooks/useColors';
+import TrackPlayer, { usePlaybackState, State, Capability } from 'react-native-track-player';
 import { spotifyService } from '../services/spotify';
 
 const { width } = Dimensions.get('window');
@@ -93,6 +94,21 @@ export default function MusicScreen() {
   const [recentTracks, setRecentTracks] = useState<SpotifyTrackData[]>([]);
   const [currentlyPlaying, setCurrentlyPlaying] = useState<SpotifyTrackData | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
+
+  const playbackState = usePlaybackState();
+  const isActuallyPlaying = playbackState.state === State.Playing;
+
+  // Set up TrackPlayer once on mount
+  useEffect(() => {
+    TrackPlayer.setupPlayer().then(() =>
+      TrackPlayer.updateOptions({
+        capabilities: [Capability.Play, Capability.Pause, Capability.Stop],
+        compactCapabilities: [Capability.Play, Capability.Pause],
+      })
+    ).catch(() => {
+      // Player already initialized — safe to ignore
+    });
+  }, []);
 
   // Check authentication on mount
   useEffect(() => {
@@ -250,18 +266,46 @@ export default function MusicScreen() {
   };
 
   const playTrack = async (track: SpotifyTrackData) => {
-    const success = await spotifyService.play(track.uri);
-    if (success) {
-      setCurrentlyPlaying(track);
-    } else {
+    if (!track.preview_url) {
       Alert.alert(
-        'Open in Spotify',
-        'No active Spotify device found. Open this track in the Spotify app?',
+        'No Preview Available',
+        'This track has no in-app preview. Open it in the Spotify app?',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Open Spotify', onPress: () => Linking.openURL(track.uri) },
         ]
       );
+      return;
+    }
+
+    // If tapping the currently playing track, toggle play/pause
+    if (currentlyPlaying?.id === track.id) {
+      if (isActuallyPlaying) {
+        await TrackPlayer.pause();
+      } else {
+        await TrackPlayer.play();
+      }
+      return;
+    }
+
+    await TrackPlayer.reset();
+    await TrackPlayer.add({
+      id: track.id,
+      url: track.preview_url,
+      title: track.name,
+      artist: track.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
+      artwork: track.album?.images?.[0]?.url,
+      duration: track.duration_ms / 1000,
+    });
+    await TrackPlayer.play();
+    setCurrentlyPlaying(track);
+  };
+
+  const togglePlayPause = async () => {
+    if (isActuallyPlaying) {
+      await TrackPlayer.pause();
+    } else {
+      await TrackPlayer.play();
     }
   };
 
@@ -330,7 +374,8 @@ export default function MusicScreen() {
 
   const renderTrackItem = (track: SpotifyTrackData, index: number) => {
     const imageUrl = getImageUrl(track.album?.images, 2);
-    const isPlaying = currentlyPlaying?.id === track.id;
+    const isSelected = currentlyPlaying?.id === track.id;
+    const isPlaying = isSelected && isActuallyPlaying;
 
     return (
       <TouchableOpacity
@@ -339,8 +384,8 @@ export default function MusicScreen() {
         onPress={() => playTrack(track)}
         activeOpacity={0.8}
       >
-        <Text style={[styles.trackNumber, isPlaying && styles.trackNumberPlaying]}>
-          {isPlaying ? '▶' : index + 1}
+        <Text style={[styles.trackNumber, isSelected && styles.trackNumberPlaying]}>
+          {isPlaying ? '▶' : isSelected ? '⏸' : index + 1}
         </Text>
         {imageUrl ? (
           <Image source={{ uri: imageUrl }} style={styles.trackImage} />
@@ -496,7 +541,7 @@ export default function MusicScreen() {
             </View>
           )}
           <View style={styles.nowPlayingInfo}>
-            <Text style={styles.nowPlayingLabel}>NOW PLAYING</Text>
+            <Text style={styles.nowPlayingLabel}>NOW PLAYING • 30s PREVIEW</Text>
             <Text style={styles.nowPlayingTitle} numberOfLines={1}>
               {currentlyPlaying.name}
             </Text>
@@ -504,6 +549,11 @@ export default function MusicScreen() {
               {currentlyPlaying.artists?.map(a => a.name).join(', ')}
             </Text>
           </View>
+          <TouchableOpacity onPress={togglePlayPause} style={styles.nowPlayingControl}>
+            <Text style={styles.nowPlayingControlText}>
+              {isActuallyPlaying ? '⏸' : '▶'}
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -722,6 +772,13 @@ const createStyles = (colors: any) => StyleSheet.create({
     ...typography.caption,
     color: colors.textOnPrimary,
     opacity: 0.9,
+  },
+  nowPlayingControl: {
+    padding: spacing.sm,
+  },
+  nowPlayingControlText: {
+    fontSize: 24,
+    color: colors.textOnPrimary,
   },
   trackItemPlaying: {
     backgroundColor: colors.backgroundSecondary,
