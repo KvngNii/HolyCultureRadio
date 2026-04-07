@@ -21,6 +21,7 @@ import {
 import { typography, spacing, shadows } from '../theme';
 import { useColors } from '../hooks/useColors';
 import { spotifyService } from '../services/spotify';
+import { spotifyPlayer } from '../services/spotifyPlayer';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - spacing.screenPadding * 2 - spacing.md) / 2;
@@ -92,17 +93,46 @@ export default function MusicScreen() {
   const [albums, setAlbums] = useState<SpotifyAlbumData[]>([]);
   const [recentTracks, setRecentTracks] = useState<SpotifyTrackData[]>([]);
   const [currentlyPlaying, setCurrentlyPlaying] = useState<SpotifyTrackData | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
+
+  // Listen to Spotify remote player state changes
+  useEffect(() => {
+    const unsub = spotifyPlayer.onPlayerStateChanged((state) => {
+      setIsPlaying(!state.isPaused);
+      // Sync currently playing track info from the remote if available
+      if (state.track?.uri) {
+        setCurrentlyPlaying((prev) =>
+          prev?.uri === state.track.uri ? prev : prev
+        );
+      }
+    });
+    const unsubDisconnect = spotifyPlayer.onRemoteDisconnected(() => {
+      setIsPlaying(false);
+    });
+    return () => {
+      unsub();
+      unsubDisconnect();
+    };
+  }, []);
 
   // Check authentication on mount
   useEffect(() => {
     checkAuth();
   }, []);
 
+  const connectRemote = async () => {
+    const token = await spotifyService.getAccessToken();
+    if (token) {
+      await spotifyPlayer.ensureConnected(token);
+    }
+  };
+
   const checkAuth = async () => {
     const authenticated = await spotifyService.isAuthenticated();
     setIsConnected(authenticated);
     if (authenticated) {
+      await connectRemote();
       loadSpotifyData(true); // Initial load
     } else {
       setIsLoading(false);
@@ -115,6 +145,7 @@ export default function MusicScreen() {
       const success = await spotifyService.login();
       if (success) {
         setIsConnected(true);
+        await connectRemote();
         await loadSpotifyData(true); // Initial load
       } else {
         Alert.alert('Connection Failed', 'Could not connect to Spotify. Please try again.');
@@ -250,31 +281,45 @@ export default function MusicScreen() {
   };
 
   const playTrack = async (track: SpotifyTrackData) => {
-    try {
-      // Try to play via Spotify Connect
-      await spotifyService.play(track.uri);
-      setCurrentlyPlaying(track);
-    } catch (error) {
-      // If no active device, try preview URL or open Spotify
-      if (track.preview_url) {
+    if (!spotifyPlayer.isConnected) {
+      const token = await spotifyService.getAccessToken();
+      if (!token) return;
+      const connected = await spotifyPlayer.connect(token);
+      if (!connected) {
         Alert.alert(
-          'Play Preview',
-          'No active Spotify device found. Would you like to play a 30-second preview or open in Spotify?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Spotify', onPress: () => Linking.openURL(track.uri) },
-          ]
+          'Spotify Not Found',
+          'Make sure the Spotify app is installed on your device to play full songs.',
+          [{ text: 'OK' }]
         );
-      } else {
-        Alert.alert(
-          'Open in Spotify',
-          'Open this track in the Spotify app?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open', onPress: () => Linking.openURL(track.uri) },
-          ]
-        );
+        return;
       }
+    }
+
+    // Tapping the currently playing track toggles play/pause
+    if (currentlyPlaying?.id === track.id) {
+      if (isPlaying) {
+        await spotifyPlayer.pause();
+      } else {
+        await spotifyPlayer.resume();
+      }
+      return;
+    }
+
+    try {
+      await spotifyPlayer.playUri(track.uri);
+      setCurrentlyPlaying(track);
+      setIsPlaying(true);
+    } catch (error) {
+      console.error('[MusicScreen] playUri error:', error);
+      Alert.alert('Playback Error', 'Could not play this track. Make sure Spotify Premium is active.');
+    }
+  };
+
+  const togglePlayPause = async () => {
+    if (isPlaying) {
+      await spotifyPlayer.pause();
+    } else {
+      await spotifyPlayer.resume();
     }
   };
 
@@ -343,17 +388,18 @@ export default function MusicScreen() {
 
   const renderTrackItem = (track: SpotifyTrackData, index: number) => {
     const imageUrl = getImageUrl(track.album?.images, 2);
-    const isPlaying = currentlyPlaying?.id === track.id;
+    const isSelected = currentlyPlaying?.id === track.id;
+    const isTrackPlaying = isSelected && isPlaying;
 
     return (
       <TouchableOpacity
         key={track.id}
-        style={[styles.trackItem, isPlaying && styles.trackItemPlaying]}
+        style={[styles.trackItem, isSelected && styles.trackItemPlaying]}
         onPress={() => playTrack(track)}
         activeOpacity={0.8}
       >
-        <Text style={[styles.trackNumber, isPlaying && styles.trackNumberPlaying]}>
-          {isPlaying ? '▶' : index + 1}
+        <Text style={[styles.trackNumber, isSelected && styles.trackNumberPlaying]}>
+          {isTrackPlaying ? '▶' : isSelected ? '⏸' : index + 1}
         </Text>
         {imageUrl ? (
           <Image source={{ uri: imageUrl }} style={styles.trackImage} />
@@ -517,6 +563,11 @@ export default function MusicScreen() {
               {currentlyPlaying.artists?.map(a => a.name).join(', ')}
             </Text>
           </View>
+          <TouchableOpacity onPress={togglePlayPause} style={styles.nowPlayingControl}>
+            <Text style={styles.nowPlayingControlText}>
+              {isPlaying ? '⏸' : '▶'}
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -735,6 +786,13 @@ const createStyles = (colors: any) => StyleSheet.create({
     ...typography.caption,
     color: colors.textOnPrimary,
     opacity: 0.9,
+  },
+  nowPlayingControl: {
+    padding: spacing.sm,
+  },
+  nowPlayingControlText: {
+    fontSize: 24,
+    color: colors.textOnPrimary,
   },
   trackItemPlaying: {
     backgroundColor: colors.backgroundSecondary,

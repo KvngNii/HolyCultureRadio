@@ -13,6 +13,7 @@ const SPOTIFY_CLIENT_ID = '32f987a2b6444f02b90ece924503d39f';
 const SPOTIFY_REDIRECT_URI = 'holycultureradio://spotify-callback';
 const SPOTIFY_SCOPES = [
   'streaming',
+  'app-remote-control',
   'user-read-email',
   'user-read-private',
   'user-read-playback-state',
@@ -373,6 +374,19 @@ class SpotifyService {
   }
 
   /**
+   * Returns the current access token (for use with react-native-spotify-remote)
+   */
+  async getAccessToken(): Promise<string | null> {
+    await this.ensureAuthLoaded();
+    if (this.accessToken && Date.now() < this.expiresAt - 60000) {
+      return this.accessToken;
+    }
+    // Token expired — try to refresh
+    const refreshed = await this.refreshAccessToken();
+    return refreshed ? this.accessToken : null;
+  }
+
+  /**
    * Check if authenticated
    */
   async isAuthenticated(): Promise<boolean> {
@@ -528,15 +542,38 @@ class SpotifyService {
   /**
    * Start playback
    */
-  async play(uri?: string, contextUri?: string) {
+  async play(uri?: string, contextUri?: string): Promise<boolean> {
     const body: any = {};
     if (contextUri) body.context_uri = contextUri;
     if (uri) body.uris = [uri];
 
-    return this.apiRequest('/me/player/play', {
+    // Try playing directly first
+    const result = await this.apiRequest('/me/player/play', {
       method: 'PUT',
       body: JSON.stringify(body),
     });
+
+    // null means error — check for available devices and retry
+    if (result === null) {
+      const devicesResult = await this.apiRequest<any>('/me/player/devices');
+      const devices: any[] = devicesResult?.devices ?? [];
+      if (devices.length === 0) return false;
+
+      // Transfer playback to the first available device, then play
+      const deviceId = devices[0].id;
+      await this.apiRequest('/me/player', {
+        method: 'PUT',
+        body: JSON.stringify({ device_ids: [deviceId], play: false }),
+      });
+
+      const retry = await this.apiRequest('/me/player/play', {
+        method: 'PUT',
+        body: JSON.stringify({ ...body, device_id: deviceId }),
+      });
+      return retry !== null;
+    }
+
+    return true;
   }
 
   /**
