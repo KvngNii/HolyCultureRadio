@@ -212,15 +212,19 @@ export default function MusicScreen() {
     setIsLoading(true);
 
     try {
-      const searchResult = await spotifyService.search(searchText.trim(), ['track'], 30);
-      if (searchResult?.tracks?.items) {
+      // Use the same search method that works for genres/moods
+      const searchResult = await spotifyService.searchChristianMusic(searchText.trim(), 30);
+
+      if (searchResult?.tracks?.items && searchResult.tracks.items.length > 0) {
         setTracks(searchResult.tracks.items);
       } else {
         setTracks([]);
+        Alert.alert('No Results', `No tracks found for "${searchText.trim()}". Try a different search term.`);
       }
     } catch (error) {
       console.error('Search error:', error);
       setTracks([]);
+      Alert.alert('Search Error', 'Failed to search. Please try again.');
     } finally {
       setIsLoading(false);
     }
