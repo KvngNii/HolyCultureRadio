@@ -281,11 +281,11 @@ export default function MusicScreen() {
 
   const playTrack = async (track: SpotifyTrackData) => {
     if (!spotifyPlayer.isConnected) {
-      const connected = await spotifyPlayer.connect();
-      if (!connected) {
+      const { success, error } = await spotifyPlayer.connect();
+      if (!success) {
         Alert.alert(
-          'Spotify Not Found',
-          'Make sure the Spotify app is installed on your device to play full songs.',
+          'Connection Failed',
+          error ?? 'Could not connect to Spotify. Make sure the Spotify app is installed and you are logged in.',
           [{ text: 'OK' }]
         );
         return;
