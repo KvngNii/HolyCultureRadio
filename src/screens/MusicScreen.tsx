@@ -122,10 +122,7 @@ export default function MusicScreen() {
   }, []);
 
   const connectRemote = async () => {
-    const token = await spotifyService.getAccessToken();
-    if (token) {
-      await spotifyPlayer.ensureConnected(token);
-    }
+    await spotifyPlayer.ensureConnected();
   };
 
   const checkAuth = async () => {
@@ -284,9 +281,7 @@ export default function MusicScreen() {
 
   const playTrack = async (track: SpotifyTrackData) => {
     if (!spotifyPlayer.isConnected) {
-      const token = await spotifyService.getAccessToken();
-      if (!token) return;
-      const connected = await spotifyPlayer.connect(token);
+      const connected = await spotifyPlayer.connect();
       if (!connected) {
         Alert.alert(
           'Spotify Not Found',
