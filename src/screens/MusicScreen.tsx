@@ -185,7 +185,8 @@ export default function MusicScreen() {
       console.log('Search result:', searchResult?.tracks?.items?.length || 0, 'tracks');
 
       if (searchResult?.tracks?.items) {
-        setTracks(searchResult.tracks.items);
+        const seen = new Set();
+        setTracks(searchResult.tracks.items.filter((t: SpotifyTrackData) => seen.has(t.id) ? false : seen.add(t.id)));
       } else {
         setTracks([]);
       }
@@ -235,7 +236,8 @@ export default function MusicScreen() {
       const searchResult = await spotifyService.searchChristianMusic(searchText.trim(), 30);
 
       if (searchResult?.tracks?.items && searchResult.tracks.items.length > 0) {
-        setTracks(searchResult.tracks.items);
+        const seen = new Set();
+        setTracks(searchResult.tracks.items.filter((t: SpotifyTrackData) => seen.has(t.id) ? false : seen.add(t.id)));
       } else {
         setTracks([]);
         Alert.alert('No Results', `No tracks found for "${searchText.trim()}". Try a different search term.`);
