@@ -114,12 +114,6 @@ android {
 }
 
 dependencies {
-    // Spotify SDK AARs for react-native-spotify-remote (provided compileOnly in the library)
-    implementation fileTree(
-        dir: "${project(':react-native-spotify-remote').projectDir}/external",
-        include: '**/*.aar'
-    )
-
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
     implementation("com.facebook.react:flipper-integration")
