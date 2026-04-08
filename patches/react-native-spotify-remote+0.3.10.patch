@@ -1,5 +1,5 @@
 diff --git a/node_modules/react-native-spotify-remote/android/build.gradle b/node_modules/react-native-spotify-remote/android/build.gradle
-index 381c0cf..e9764d0 100644
+index 381c0cf..0127781 100644
 --- a/node_modules/react-native-spotify-remote/android/build.gradle
 +++ b/node_modules/react-native-spotify-remote/android/build.gradle
 @@ -1,14 +1,4 @@
@@ -45,7 +45,7 @@ index 381c0cf..e9764d0 100644
  
  android {
      compileSdkVersion safeExtGet('compileSdkVersion', DEFAULT_COMPILE_SDK_VERSION)
-@@ -60,152 +30,21 @@ android {
+@@ -60,152 +30,23 @@ android {
  }
  
  repositories {
@@ -66,11 +66,15 @@ index 381c0cf..e9764d0 100644
 -
 -
  dependencies {
++    // compileOnly: lets the library compile against the Spotify SDK without embedding the AARs.
++    // AGP 8+ forbids local .aar deps in library modules; the app supplies them at runtime.
      def externalLibs = fileTree(dir: "$projectDir/external", include: '**/*.aar').collect()
-     println("Adding external libraries ${externalLibs}")
-     implementation files(externalLibs)
+-    println("Adding external libraries ${externalLibs}")
+-    implementation files(externalLibs)
 -    implementation "com.google.code.gson:gson:2.8.5"  // needed by spotify-app-remote
 -    implementation project(path: ':react-native-events')  // From node_module
++    println("Adding external libraries (compileOnly) ${externalLibs}")
++    compileOnly files(externalLibs)
 +    implementation "com.google.code.gson:gson:2.8.5"
 +    implementation project(path: ':react-native-events')
      //noinspection GradleDynamicVersion
