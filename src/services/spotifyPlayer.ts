@@ -4,18 +4,39 @@
  * Requires Spotify app installed + Spotify Premium.
  */
 
-import { remote, PlayerState } from 'react-native-spotify-remote';
+import { remote, auth, ApiScope, PlayerState } from 'react-native-spotify-remote';
+
+const SPOTIFY_CLIENT_ID = '32f987a2b6444f02b90ece924503d39f';
+const SPOTIFY_REDIRECT_URI = 'holycultureradio://spotify-callback';
+
+const SPOTIFY_CONFIG = {
+  clientID: SPOTIFY_CLIENT_ID,
+  redirectURL: SPOTIFY_REDIRECT_URI,
+  scopes: [
+    ApiScope.AppRemoteControlScope,
+    ApiScope.StreamingScope,
+    ApiScope.UserReadPrivateScope,
+    ApiScope.UserReadEmailScope,
+    ApiScope.UserReadPlaybackStateScope,
+    ApiScope.UserModifyPlaybackStateScope,
+    ApiScope.UserReadRecentlyPlayedScope,
+    ApiScope.PlaylistReadPrivateScope,
+    ApiScope.UserLibraryReadScope,
+  ],
+};
 
 class SpotifyPlayerService {
   private _isConnected = false;
 
   /**
-   * Connect the remote to the Spotify app using the current access token.
-   * Call this after successful Spotify auth.
+   * Authorize via the SDK's auth module and connect the remote.
+   * Must be called before any playback. auth.authorize() will reuse
+   * an existing session silently if the user is already logged in.
    */
-  async connect(accessToken: string): Promise<boolean> {
+  async connect(): Promise<boolean> {
     try {
-      await remote.connect(accessToken);
+      const session = await auth.authorize(SPOTIFY_CONFIG);
+      await remote.connect(session.accessToken);
       this._isConnected = true;
       console.log('[SpotifyPlayer] Remote connected');
       return true;
@@ -37,12 +58,12 @@ class SpotifyPlayerService {
     return this._isConnected;
   }
 
-  async ensureConnected(accessToken: string): Promise<boolean> {
+  async ensureConnected(): Promise<boolean> {
     if (this._isConnected) {
       const connected = await remote.isConnectedAsync().catch(() => false);
       if (connected) return true;
     }
-    return this.connect(accessToken);
+    return this.connect();
   }
 
   async playUri(spotifyUri: string): Promise<void> {

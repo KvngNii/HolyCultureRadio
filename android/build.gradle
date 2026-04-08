@@ -19,3 +19,14 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+// Make Spotify SDK AARs available to all subprojects via a named flatDir repo.
+// This avoids the AGP 8 'direct local .aar file dependency' restriction.
+subprojects {
+    repositories {
+        flatDir {
+            dirs "${rootProject.projectDir}/../node_modules/react-native-spotify-remote/android/external/SpotifySDK/app-remote-lib",
+                 "${rootProject.projectDir}/../node_modules/react-native-spotify-remote/android/external/SpotifySDK/auth-lib"
+        }
+    }
+}
