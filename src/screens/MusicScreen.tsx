@@ -283,11 +283,30 @@ export default function MusicScreen() {
     if (!spotifyPlayer.isConnected) {
       const { success, error } = await spotifyPlayer.connect();
       if (!success) {
-        Alert.alert(
-          'Connection Failed',
-          error ?? 'Could not connect to Spotify. Make sure the Spotify app is installed and you are logged in.',
-          [{ text: 'OK' }]
-        );
+        // Detect the Google / redirect-mismatch error from the Spotify App Remote SDK
+        const isRedirectMismatch =
+          error?.toLowerCase().includes('mismatch') ||
+          error?.toLowerCase().includes('redirect') ||
+          error?.toLowerCase().includes('google');
+
+        if (isRedirectMismatch) {
+          Alert.alert(
+            'Spotify Login Required',
+            'The Spotify App Remote SDK does not support "Continue with Google".\n\n' +
+              'To fix this:\n' +
+              '1. Open the Spotify app\n' +
+              '2. Log out (Settings → Log Out)\n' +
+              '3. Log back in using your email and password\n' +
+              '4. Come back and try again.',
+            [{ text: 'OK' }]
+          );
+        } else {
+          Alert.alert(
+            'Connection Failed',
+            error ?? 'Could not connect to Spotify. Make sure the Spotify app is installed and you are logged in.',
+            [{ text: 'OK' }]
+          );
+        }
         return;
       }
     }
