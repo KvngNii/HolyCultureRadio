@@ -5,9 +5,7 @@
  */
 
 import { remote, auth, ApiScope, PlayerState } from 'react-native-spotify-remote';
-
-const SPOTIFY_CLIENT_ID = '32f987a2b6444f02b90ece924503d39f';
-const SPOTIFY_REDIRECT_URI = 'holycultureradio://spotify-callback';
+import { SPOTIFY_CLIENT_ID, SPOTIFY_REDIRECT_URI } from '../config';
 
 const SPOTIFY_CONFIG = {
   clientID: SPOTIFY_CLIENT_ID,
