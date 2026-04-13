@@ -21,6 +21,7 @@ const iconMap: Record<string, string> = {
   Devotionals: 'book-open-page-variant',
   Podcasts: 'microphone',
   Music: 'music-note',
+  Events: 'calendar-star',
   Forum: 'forum',
 };
 
