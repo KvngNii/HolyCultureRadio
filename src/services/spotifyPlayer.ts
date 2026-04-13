@@ -5,9 +5,7 @@
  */
 
 import { remote, auth, ApiScope, PlayerState } from 'react-native-spotify-remote';
-
-const SPOTIFY_CLIENT_ID = '32f987a2b6444f02b90ece924503d39f';
-const SPOTIFY_REDIRECT_URI = 'holycultureradio://spotify-callback';
+import { SPOTIFY_CLIENT_ID, SPOTIFY_REDIRECT_URI } from '../config';
 
 const SPOTIFY_CONFIG = {
   clientID: SPOTIFY_CLIENT_ID,
@@ -33,17 +31,18 @@ class SpotifyPlayerService {
    * Must be called before any playback. auth.authorize() will reuse
    * an existing session silently if the user is already logged in.
    */
-  async connect(): Promise<boolean> {
+  async connect(): Promise<{ success: boolean; error?: string }> {
     try {
       const session = await auth.authorize(SPOTIFY_CONFIG);
       await remote.connect(session.accessToken);
       this._isConnected = true;
       console.log('[SpotifyPlayer] Remote connected');
-      return true;
-    } catch (error) {
-      console.error('[SpotifyPlayer] Failed to connect remote:', error);
+      return { success: true };
+    } catch (error: any) {
+      const message = error?.message ?? String(error);
+      console.error('[SpotifyPlayer] Failed to connect remote:', message);
       this._isConnected = false;
-      return false;
+      return { success: false, error: message };
     }
   }
 
@@ -58,10 +57,10 @@ class SpotifyPlayerService {
     return this._isConnected;
   }
 
-  async ensureConnected(): Promise<boolean> {
+  async ensureConnected(): Promise<{ success: boolean; error?: string }> {
     if (this._isConnected) {
       const connected = await remote.isConnectedAsync().catch(() => false);
-      if (connected) return true;
+      if (connected) return { success: true };
     }
     return this.connect();
   }

@@ -2,3 +2,66 @@ rootProject.name = 'HolyCultureRadio'
 apply from: file("../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesSettingsGradle(settings)
 include ':app'
 includeBuild('../node_modules/@react-native/gradle-plugin')
+
+// ---------------------------------------------------------------------------
+// Publish Spotify SDK AARs into a local Maven repo before project configuration.
+// AGP 8+ rejects local .aar file deps (files/fileTree) inside library modules.
+// A proper Maven coordinate resolves cleanly and passes the hasLocalAarDeps check.
+// ---------------------------------------------------------------------------
+def spotifyMaven = new File(settingsDir, "spotify-local-maven")
+
+def publishAar = { File src, String group, String artifact, String version ->
+    def dir = new File(spotifyMaven, "${group.replace('.','/')}/${artifact}/${version}")
+    dir.mkdirs()
+    def dest = new File(dir, "${artifact}-${version}.aar")
+    if (!dest.exists()) {
+        java.nio.file.Files.copy(src.toPath(), dest.toPath())
+    }
+    new File(dir, "${artifact}-${version}.pom").text = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>${group}</groupId>
+  <artifactId>${artifact}</artifactId>
+  <version>${version}</version>
+  <packaging>aar</packaging>
+</project>"""
+}
+
+def spotifyBase = new File(settingsDir, "../node_modules/react-native-spotify-remote/android/external/SpotifySDK")
+publishAar(
+    new File(spotifyBase, "app-remote-lib/spotify-app-remote-release-0.7.0.aar"),
+    "com.spotify", "spotify-app-remote", "0.7.0"
+)
+publishAar(
+    new File(spotifyBase, "auth-lib/spotify-auth-release-1.2.1.aar"),
+    "com.spotify", "spotify-auth", "1.2.1"
+)
+
+// ---------------------------------------------------------------------------
+// After react-native-spotify-remote's build.gradle is evaluated, replace its
+// local .aar file dependencies with proper Maven coordinates. This runs at
+// Gradle build time so it doesn't depend on patch-package applying correctly.
+// ---------------------------------------------------------------------------
+gradle.afterProject { project ->
+    if (project.name == 'react-native-spotify-remote') {
+        // Add the local Maven repo so Maven coords can resolve
+        project.repositories {
+            maven { url "${spotifyMaven.absolutePath}" }
+        }
+        // Remove local file collection deps (fileTree/files .aar references)
+        ['implementation', 'api', 'compile'].each { configName ->
+            def config = project.configurations.findByName(configName)
+            if (config != null) {
+                config.dependencies.removeAll { dep ->
+                    dep instanceof org.gradle.api.artifacts.FileCollectionDependency
+                }
+            }
+        }
+        // Add Spotify SDK via proper Maven coordinates
+        project.dependencies {
+            implementation 'com.spotify:spotify-app-remote:0.7.0'
+            implementation 'com.spotify:spotify-auth:1.2.1'
+        }
+    }
+}
