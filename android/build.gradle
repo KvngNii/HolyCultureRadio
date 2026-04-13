@@ -19,3 +19,10 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+// Expose the local Maven repo (populated in settings.gradle) to all subprojects.
+subprojects {
+    repositories {
+        maven { url "${rootProject.projectDir}/spotify-local-maven" }
+    }
+}

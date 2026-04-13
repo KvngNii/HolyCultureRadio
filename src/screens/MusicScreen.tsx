@@ -122,10 +122,7 @@ export default function MusicScreen() {
   }, []);
 
   const connectRemote = async () => {
-    const token = await spotifyService.getAccessToken();
-    if (token) {
-      await spotifyPlayer.ensureConnected(token);
-    }
+    await spotifyPlayer.ensureConnected();
   };
 
   const checkAuth = async () => {
@@ -185,7 +182,8 @@ export default function MusicScreen() {
       console.log('Search result:', searchResult?.tracks?.items?.length || 0, 'tracks');
 
       if (searchResult?.tracks?.items) {
-        setTracks(searchResult.tracks.items);
+        const seen = new Set();
+        setTracks(searchResult.tracks.items.filter((t: SpotifyTrackData) => seen.has(t.id) ? false : seen.add(t.id)));
       } else {
         setTracks([]);
       }
@@ -235,7 +233,8 @@ export default function MusicScreen() {
       const searchResult = await spotifyService.searchChristianMusic(searchText.trim(), 30);
 
       if (searchResult?.tracks?.items && searchResult.tracks.items.length > 0) {
-        setTracks(searchResult.tracks.items);
+        const seen = new Set();
+        setTracks(searchResult.tracks.items.filter((t: SpotifyTrackData) => seen.has(t.id) ? false : seen.add(t.id)));
       } else {
         setTracks([]);
         Alert.alert('No Results', `No tracks found for "${searchText.trim()}". Try a different search term.`);
@@ -282,13 +281,11 @@ export default function MusicScreen() {
 
   const playTrack = async (track: SpotifyTrackData) => {
     if (!spotifyPlayer.isConnected) {
-      const token = await spotifyService.getAccessToken();
-      if (!token) return;
-      const connected = await spotifyPlayer.connect(token);
-      if (!connected) {
+      const { success, error } = await spotifyPlayer.connect();
+      if (!success) {
         Alert.alert(
-          'Spotify Not Found',
-          'Make sure the Spotify app is installed on your device to play full songs.',
+          'Connection Failed',
+          error ?? 'Could not connect to Spotify. Make sure the Spotify app is installed and you are logged in.',
           [{ text: 'OK' }]
         );
         return;
