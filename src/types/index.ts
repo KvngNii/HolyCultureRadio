@@ -31,8 +31,22 @@ export type BottomTabParamList = {
   Devotionals: undefined;
   Podcasts: undefined;
   Music: undefined;
+  Events: undefined;
   Forum: undefined;
 };
+
+// Events Types
+export interface HolyCultureEvent {
+  id: string;         // derived from URL slug
+  title: string;
+  date: string;       // raw text from site e.g. "June 14 @ 7:00 pm"
+  endDate?: string;
+  venue: string;
+  imageUrl: string;
+  url: string;        // link to full event page
+  description?: string;
+  category?: string;
+}
 
 // User Types
 export interface User {

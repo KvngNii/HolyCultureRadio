@@ -25,6 +25,7 @@ import CreateDevotionalScreen from '../screens/CreateDevotionalScreen';
 import PodcastsScreen from '../screens/PodcastsScreen';
 import PodcastPlayerScreen from '../screens/PodcastPlayerScreen';
 import MusicScreen from '../screens/MusicScreen';
+import EventsScreen from '../screens/EventsScreen';
 import ForumScreen from '../screens/ForumScreen';
 import ForumPostScreen from '../screens/ForumPostScreen';
 import CreatePostScreen from '../screens/CreatePostScreen';
@@ -149,6 +150,14 @@ function TabNavigator() {
           options={{
             title: 'Music',
             headerTitle: 'Music',
+          }}
+        />
+        <Tab.Screen
+          name="Events"
+          component={EventsScreen}
+          options={{
+            title: 'Events',
+            headerTitle: 'Events',
           }}
         />
         <Tab.Screen
