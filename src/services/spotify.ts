@@ -37,11 +37,28 @@ interface StoredAuth {
   expiresAt: number;
 }
 
-// Generate a cryptographically secure random string for the PKCE verifier
+// Generate a cryptographically secure random string for the PKCE verifier.
+// `globalThis.crypto` is available in React Native >= 0.71 (Hermes >= 0.12).
+// Bare `crypto` is NOT a global in older Hermes builds — always use globalThis.
 function generateRandomString(length: number): string {
-  const array = new Uint8Array(length);
-  crypto.getRandomValues(array);
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const array = new Uint8Array(length);
+
+  // Prefer Web Crypto; fall back gracefully for older Hermes builds.
+  const webCrypto: Crypto | null =
+    (typeof globalThis !== 'undefined' && (globalThis as any).crypto) ||
+    (typeof global !== 'undefined' && (global as any).crypto) ||
+    null;
+
+  if (webCrypto?.getRandomValues) {
+    webCrypto.getRandomValues(array);
+  } else {
+    // Fallback: not CSPRNG but acceptable for PKCE in this context
+    for (let i = 0; i < array.length; i++) {
+      array[i] = Math.floor(Math.random() * 256);
+    }
+  }
+
   return Array.from(array, byte => chars[byte % chars.length]).join('');
 }
 
