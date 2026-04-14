@@ -12,7 +12,7 @@ export type AuthStackParamList = {
 export type RootStackParamList = {
   Main: undefined;
   RadioPlayer: undefined;
-  PodcastPlayer: { podcastId: string };
+  PodcastPlayer: { episodeId: string; podcastId: string };
   DevotionalDetail: { devotionalId: string };
   CreateDevotional: undefined;
   ForumPost: { postId: string };
@@ -34,6 +34,41 @@ export type BottomTabParamList = {
   Events: undefined;
   Forum: undefined;
 };
+
+// Megaphone Podcast Types
+export interface MegaphonePodcast {
+  id: string;
+  title: string;
+  slug: string;
+  summary: string;
+  description: string;
+  imageUrl: string;
+  backgroundImageUrl: string | null;
+  episodeCount: number;
+  feedUrl: string;
+  websiteUrl: string;
+  language: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MegaphoneEpisode {
+  id: string;
+  podcastId: string;
+  title: string;
+  summary: string;
+  notes: string;           // HTML show notes
+  pubDate: string;         // ISO date string
+  duration: number;        // seconds
+  audioUrl: string;
+  imageUrl: string;
+  explicit: boolean;
+  episodeType: 'full' | 'trailer' | 'bonus';
+  season: number | null;
+  episodeNumber: number | null;
+  status: string;
+  draft: boolean;
+}
 
 // Events Types
 export interface HolyCultureEvent {
