@@ -20,7 +20,6 @@ import {
   Dimensions,
   ScrollView,
 } from 'react-native';
-import Slider from '@react-native-community/slider';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import TrackPlayer, {
   State,
@@ -42,6 +41,53 @@ type Route = RouteProp<RootStackParamList, 'PodcastPlayer'>;
 
 // Playback speeds available
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
+
+// ─── Pure-RN seek bar (no extra native dependency) ────────────────────────────
+
+interface SeekBarProps {
+  value: number; // 0–1
+  trackColor: string;
+  fillColor: string;
+  thumbColor: string;
+  onSeekStart: () => void;
+  onValueChange: (v: number) => void;
+  onSeekComplete: (v: number) => void;
+}
+
+function SeekBar({ value, trackColor, fillColor, thumbColor, onSeekStart, onValueChange, onSeekComplete }: SeekBarProps) {
+  const [barWidth, setBarWidth] = useState(1);
+  const clamp = (v: number) => Math.min(1, Math.max(0, v));
+  const pct = `${clamp(value) * 100}%` as `${number}%`;
+  const thumbLeft = clamp(value) * barWidth - 8;
+
+  return (
+    <View
+      style={{ height: 40, justifyContent: 'center' }}
+      onLayout={e => setBarWidth(e.nativeEvent.layout.width)}
+      onStartShouldSetResponder={() => true}
+      onMoveShouldSetResponder={() => true}
+      onResponderGrant={e => {
+        onSeekStart();
+        onValueChange(clamp(e.nativeEvent.locationX / barWidth));
+      }}
+      onResponderMove={e => onValueChange(clamp(e.nativeEvent.locationX / barWidth))}
+      onResponderRelease={e => onSeekComplete(clamp(e.nativeEvent.locationX / barWidth))}
+    >
+      <View style={{ height: 4, backgroundColor: trackColor, borderRadius: 2 }}>
+        <View style={{ width: pct, height: 4, backgroundColor: fillColor, borderRadius: 2 }} />
+      </View>
+      <View style={{
+        position: 'absolute',
+        left: thumbLeft,
+        top: 12,
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: thumbColor,
+      }} />
+    </View>
+  );
+}
 
 export default function PodcastPlayerScreen() {
   const route = useRoute<Route>();
@@ -243,17 +289,14 @@ export default function PodcastPlayerScreen() {
 
       {/* Progress bar */}
       <View style={styles.progressContainer}>
-        <Slider
-          style={styles.slider}
+        <SeekBar
           value={sliderValue}
-          minimumValue={0}
-          maximumValue={1}
-          minimumTrackTintColor={colors.primary}
-          maximumTrackTintColor={colors.border}
-          thumbTintColor={colors.primary}
-          onSlidingStart={() => onSeekStart()}
+          fillColor={colors.primary}
+          trackColor={colors.border}
+          thumbColor={colors.primary}
+          onSeekStart={onSeekStart}
           onValueChange={v => setSeekValue(v * displayDuration)}
-          onSlidingComplete={v => onSeekComplete(v * displayDuration)}
+          onSeekComplete={v => onSeekComplete(v * displayDuration)}
         />
         <View style={styles.timeRow}>
           <Text style={styles.timeText}>{formatDuration(displayPosition)}</Text>
@@ -364,7 +407,6 @@ const createStyles = (colors: ReturnType<typeof import('../hooks/useColors').use
     },
 
     progressContainer: { marginBottom: spacing.lg },
-    slider: { width: '100%', height: 40 },
     timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -spacing.sm },
     timeText: { ...typography.caption, color: colors.textMuted },
 
