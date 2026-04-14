@@ -1,0 +1,176 @@
+/**
+ * Holy Culture Radio - Megaphone Service
+ *
+ * Fetches Holy Culture podcasts and episodes from the Megaphone.fm API.
+ * All responses are cached in AsyncStorage to reduce API calls and
+ * support offline browsing after the first load.
+ *
+ * Cache TTLs:
+ *   Podcasts list  — 1 hour  (shows don't change often)
+ *   Episodes list  — 30 min  (new episodes published regularly)
+ */
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MegaphonePodcast, MegaphoneEpisode } from '../types';
+import {
+  MEGAPHONE_API_BASE,
+  MEGAPHONE_API_TOKEN,
+  MEGAPHONE_NETWORK_ID,
+} from '../config';
+
+const AUTH_HEADER = `Token token=${MEGAPHONE_API_TOKEN}`;
+const PODCASTS_CACHE_KEY = '@hcr_mg_podcasts';
+const EPISODES_CACHE_PREFIX = '@hcr_mg_episodes_';
+const PODCASTS_TTL = 60 * 60 * 1000;      // 1 hour
+const EPISODES_TTL = 30 * 60 * 1000;      // 30 minutes
+
+interface CacheEntry<T> {
+  data: T;
+  fetchedAt: number;
+}
+
+// ─── Low-level cache helpers ──────────────────────────────────────────────────
+
+async function readCache<T>(key: string, ttl: number): Promise<T | null> {
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    if (!raw) return null;
+    const entry: CacheEntry<T> = JSON.parse(raw);
+    if (Date.now() - entry.fetchedAt > ttl) return null; // stale
+    return entry.data;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCache<T>(key: string, data: T): Promise<void> {
+  try {
+    const entry: CacheEntry<T> = { data, fetchedAt: Date.now() };
+    await AsyncStorage.setItem(key, JSON.stringify(entry));
+  } catch {}
+}
+
+// ─── API fetch helper ─────────────────────────────────────────────────────────
+
+async function apiFetch<T>(path: string): Promise<T> {
+  const url = `${MEGAPHONE_API_BASE}${path}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: AUTH_HEADER,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Megaphone API error ${res.status}: ${res.statusText}`);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Returns all podcasts in the Holy Culture Megaphone network.
+ * Result is cached for 1 hour.
+ */
+export async function getPodcasts(forceRefresh = false): Promise<MegaphonePodcast[]> {
+  if (!forceRefresh) {
+    const cached = await readCache<MegaphonePodcast[]>(PODCASTS_CACHE_KEY, PODCASTS_TTL);
+    if (cached) return cached;
+  }
+
+  const podcasts = await apiFetch<MegaphonePodcast[]>(
+    `/networks/${MEGAPHONE_NETWORK_ID}/podcasts`
+  );
+
+  // Only show published, non-draft podcasts
+  const active = podcasts.filter(p => p.title && p.id);
+  await writeCache(PODCASTS_CACHE_KEY, active);
+  return active;
+}
+
+/**
+ * Returns the episode list for a given podcast.
+ * Fetches up to `perPage` episodes per page; result is cached for 30 min.
+ */
+export async function getEpisodes(
+  podcastId: string,
+  page = 1,
+  perPage = 20,
+  forceRefresh = false
+): Promise<MegaphoneEpisode[]> {
+  const cacheKey = `${EPISODES_CACHE_PREFIX}${podcastId}_p${page}`;
+
+  if (!forceRefresh) {
+    const cached = await readCache<MegaphoneEpisode[]>(cacheKey, EPISODES_TTL);
+    if (cached) return cached;
+  }
+
+  const episodes = await apiFetch<MegaphoneEpisode[]>(
+    `/podcasts/${podcastId}/episodes?page=${page}&per_page=${perPage}`
+  );
+
+  const published = episodes.filter(e => e.status === 'published' && !e.draft && e.audioUrl);
+  await writeCache(cacheKey, published);
+  return published;
+}
+
+/**
+ * Returns a single episode. Checks episodes cache before making a request.
+ */
+export async function getEpisode(
+  podcastId: string,
+  episodeId: string
+): Promise<MegaphoneEpisode | null> {
+  // Check cache first (page 1 typically has the most recent episodes)
+  const cacheKey = `${EPISODES_CACHE_PREFIX}${podcastId}_p1`;
+  const cached = await readCache<MegaphoneEpisode[]>(cacheKey, EPISODES_TTL);
+  if (cached) {
+    const found = cached.find(e => e.id === episodeId);
+    if (found) return found;
+  }
+
+  try {
+    return await apiFetch<MegaphoneEpisode>(`/episodes/${episodeId}`);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clears all Megaphone caches (call on pull-to-refresh).
+ */
+export async function clearMegaphoneCache(): Promise<void> {
+  const keys = await AsyncStorage.getAllKeys();
+  const megaphoneKeys = keys.filter(k => k.startsWith('@hcr_mg_'));
+  if (megaphoneKeys.length) await AsyncStorage.multiRemove(megaphoneKeys);
+}
+
+/**
+ * Formats a duration in seconds to a human-readable string.
+ */
+export function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m} min`;
+}
+
+/**
+ * Formats a Megaphone pubDate to a relative string.
+ */
+export function formatPubDate(isoDate: string): string {
+  try {
+    const d = new Date(isoDate);
+    const diffMs = Date.now() - d.getTime();
+    const days = Math.floor(diffMs / 86400000);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days} days ago`;
+    if (days < 30) return `${Math.floor(days / 7)}w ago`;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return '';
+  }
+}
