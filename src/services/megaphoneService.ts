@@ -68,6 +68,48 @@ async function apiFetch<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// ─── Field mappers (API returns snake_case) ───────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapPodcast(p: any): MegaphonePodcast {
+  return {
+    id:                  p.id       ?? p.uid       ?? '',
+    title:               p.title                   ?? '',
+    slug:                p.slug                    ?? '',
+    summary:             p.summary                 ?? '',
+    description:         p.description ?? p.summary ?? '',
+    imageUrl:            p.image_url  ?? p.imageUrl  ?? '',
+    backgroundImageUrl:  p.background_image_url ?? p.backgroundImageUrl ?? null,
+    episodeCount:        p.episode_count ?? p.episodeCount ?? 0,
+    feedUrl:             p.feed_url  ?? p.feedUrl  ?? '',
+    websiteUrl:          p.website_url ?? p.websiteUrl ?? '',
+    language:            p.language ?? 'en',
+    createdAt:           p.created_at ?? p.createdAt ?? '',
+    updatedAt:           p.updated_at ?? p.updatedAt ?? '',
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapEpisode(e: any, podcastId: string): MegaphoneEpisode {
+  return {
+    id:            e.id          ?? e.uid         ?? '',
+    podcastId:     e.podcast_id  ?? e.podcastId   ?? podcastId,
+    title:         e.title                        ?? '',
+    summary:       e.summary                      ?? '',
+    notes:         e.body        ?? e.notes       ?? '',
+    pubDate:       e.pub_date    ?? e.pubDate      ?? '',
+    duration:      Number(e.duration              ?? 0),
+    audioUrl:      e.audio_url   ?? e.audioUrl    ?? '',
+    imageUrl:      e.image_url   ?? e.imageUrl    ?? '',
+    explicit:      Boolean(e.explicit),
+    episodeType:   e.episode_type ?? e.episodeType ?? 'full',
+    season:        e.season      ?? null,
+    episodeNumber: e.episode_number ?? e.episodeNumber ?? null,
+    status:        e.status                       ?? '',
+    draft:         Boolean(e.draft),
+  };
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -80,14 +122,11 @@ export async function getPodcasts(forceRefresh = false): Promise<MegaphonePodcas
     if (cached) return cached;
   }
 
-  const podcasts = await apiFetch<MegaphonePodcast[]>(
-    `/networks/${MEGAPHONE_NETWORK_ID}/podcasts`
-  );
+  const raw = await apiFetch<any[]>(`/networks/${MEGAPHONE_NETWORK_ID}/podcasts`);
+  const podcasts = raw.map(mapPodcast).filter(p => p.title && p.id);
 
-  // Only show published, non-draft podcasts
-  const active = podcasts.filter(p => p.title && p.id);
-  await writeCache(PODCASTS_CACHE_KEY, active);
-  return active;
+  await writeCache(PODCASTS_CACHE_KEY, podcasts);
+  return podcasts;
 }
 
 /**
@@ -107,13 +146,16 @@ export async function getEpisodes(
     if (cached) return cached;
   }
 
-  const episodes = await apiFetch<MegaphoneEpisode[]>(
-    `/podcasts/${podcastId}/episodes?page=${page}&per_page=${perPage}`
+  const raw = await apiFetch<any[]>(
+    `/networks/${MEGAPHONE_NETWORK_ID}/podcasts/${podcastId}/episodes?page=${page}&per_page=${perPage}`
   );
 
-  const published = episodes.filter(e => e.status === 'published' && !e.draft && e.audioUrl);
-  await writeCache(cacheKey, published);
-  return published;
+  const episodes = raw
+    .map(e => mapEpisode(e, podcastId))
+    .filter(e => e.status === 'published' && !e.draft && e.audioUrl);
+
+  await writeCache(cacheKey, episodes);
+  return episodes;
 }
 
 /**
@@ -123,7 +165,7 @@ export async function getEpisode(
   podcastId: string,
   episodeId: string
 ): Promise<MegaphoneEpisode | null> {
-  // Check cache first (page 1 typically has the most recent episodes)
+  // Check episodes cache first (avoids a network round-trip)
   const cacheKey = `${EPISODES_CACHE_PREFIX}${podcastId}_p1`;
   const cached = await readCache<MegaphoneEpisode[]>(cacheKey, EPISODES_TTL);
   if (cached) {
@@ -132,7 +174,10 @@ export async function getEpisode(
   }
 
   try {
-    return await apiFetch<MegaphoneEpisode>(`/episodes/${episodeId}`);
+    const raw = await apiFetch<any>(
+      `/networks/${MEGAPHONE_NETWORK_ID}/podcasts/${podcastId}/episodes/${episodeId}`
+    );
+    return mapEpisode(raw, podcastId);
   } catch {
     return null;
   }
