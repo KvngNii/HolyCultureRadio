@@ -168,7 +168,7 @@ export default function PodcastPlayerScreen() {
         url: ep.audioUrl,
         title: ep.title,
         artist: pod?.title ?? 'Holy Culture Radio',
-        artwork: ep.imageUrl || pod?.imageUrl,
+        artwork: ep.imageUrl || pod?.imageUrl || undefined,
         duration: ep.duration,
       });
 
