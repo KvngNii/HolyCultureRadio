@@ -68,6 +68,22 @@ async function apiFetch<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// ─── Response normalizer ──────────────────────────────────────────────────────
+// The Megaphone API sometimes wraps arrays in an object keyed by resource name.
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toArray(raw: any): any[] {
+  if (Array.isArray(raw)) return raw;
+  // Try common wrapper keys
+  for (const key of ['episodes', 'podcasts', 'data', 'results', 'items']) {
+    if (Array.isArray(raw?.[key])) return raw[key];
+  }
+  if (__DEV__) {
+    console.warn('[Megaphone] Unexpected response shape:', JSON.stringify(raw)?.slice(0, 300));
+  }
+  return [];
+}
+
 // ─── HTML stripping ───────────────────────────────────────────────────────────
 
 function stripHtml(html: string): string {
@@ -138,8 +154,8 @@ export async function getPodcasts(forceRefresh = false): Promise<MegaphonePodcas
     if (cached) return cached;
   }
 
-  const raw = await apiFetch<any[]>(`/networks/${MEGAPHONE_NETWORK_ID}/podcasts`);
-  const podcasts = raw.map(mapPodcast).filter(p => p.title && p.id);
+  const raw = await apiFetch<unknown>(`/networks/${MEGAPHONE_NETWORK_ID}/podcasts`);
+  const podcasts = toArray(raw).map(mapPodcast).filter(p => p.title && p.id);
 
   await writeCache(PODCASTS_CACHE_KEY, podcasts);
   return podcasts;
@@ -147,7 +163,8 @@ export async function getPodcasts(forceRefresh = false): Promise<MegaphonePodcas
 
 /**
  * Returns the episode list for a given podcast.
- * Fetches up to `perPage` episodes per page; result is cached for 30 min.
+ * Tries the network-scoped URL first, falls back to the simple URL.
+ * Result is cached for 30 min.
  */
 export async function getEpisodes(
   podcastId: string,
@@ -162,13 +179,28 @@ export async function getEpisodes(
     if (cached) return cached;
   }
 
-  const raw = await apiFetch<any[]>(
-    `/networks/${MEGAPHONE_NETWORK_ID}/podcasts/${podcastId}/episodes?page=${page}&per_page=${perPage}`
-  );
+  let rawData: unknown;
+  try {
+    rawData = await apiFetch<unknown>(
+      `/networks/${MEGAPHONE_NETWORK_ID}/podcasts/${podcastId}/episodes?page=${page}&per_page=${perPage}`
+    );
+  } catch (e: any) {
+    if (__DEV__) {
+      console.warn('[Megaphone] Network-scoped episodes URL failed, trying simple URL:', e.message);
+    }
+    // Fall back to simpler endpoint
+    rawData = await apiFetch<unknown>(
+      `/podcasts/${podcastId}/episodes?page=${page}&per_page=${perPage}`
+    );
+  }
 
-  const episodes = raw
+  const episodes = toArray(rawData)
     .map(e => mapEpisode(e, podcastId))
-    .filter(e => e.audioUrl); // API already gates by auth token; just need a playable URL
+    .filter(e => e.audioUrl);
+
+  if (__DEV__) {
+    console.log(`[Megaphone] Loaded ${episodes.length} episodes for podcast ${podcastId}`);
+  }
 
   await writeCache(cacheKey, episodes);
   return episodes;
@@ -190,9 +222,14 @@ export async function getEpisode(
   }
 
   try {
-    const raw = await apiFetch<any>(
-      `/networks/${MEGAPHONE_NETWORK_ID}/podcasts/${podcastId}/episodes/${episodeId}`
-    );
+    let raw: unknown;
+    try {
+      raw = await apiFetch<unknown>(
+        `/networks/${MEGAPHONE_NETWORK_ID}/podcasts/${podcastId}/episodes/${episodeId}`
+      );
+    } catch {
+      raw = await apiFetch<unknown>(`/episodes/${episodeId}`);
+    }
     return mapEpisode(raw, podcastId);
   } catch {
     return null;

@@ -2,7 +2,7 @@
  * Holy Culture Radio — Podcasts Screen
  *
  * Fetches all Holy Culture podcasts from the Megaphone API, lets the user
- * browse shows, and tap episodes to open the full player.
+ * browse shows, search, and tap episodes to open the full player.
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -16,6 +16,7 @@ import {
   Image,
   ActivityIndicator,
   RefreshControl,
+  TextInput,
   Dimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -46,8 +47,19 @@ export default function PodcastsScreen() {
   const [episodes, setEpisodes] = useState<MegaphoneEpisode[]>([]);
   const [loadingPodcasts, setLoadingPodcasts] = useState(true);
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
+  const [episodesError, setEpisodesError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [podcastError, setPodcastError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Derived: filter both podcast cards and episode list by search query
+  const q = searchQuery.toLowerCase().trim();
+  const filteredPodcasts = q
+    ? podcasts.filter(p => p.title.toLowerCase().includes(q) || p.summary.toLowerCase().includes(q))
+    : podcasts;
+  const filteredEpisodes = q
+    ? episodes.filter(e => e.title.toLowerCase().includes(q) || e.summary.toLowerCase().includes(q))
+    : episodes;
 
   // ─── Load podcasts on mount ──────────────────────────────────────────────
 
@@ -60,7 +72,6 @@ export default function PodcastsScreen() {
       setPodcastError(null);
       const data = await getPodcasts(forceRefresh);
       setPodcasts(data);
-      // Auto-select the first podcast
       if (data.length > 0 && !selectedPodcast) {
         selectPodcast(data[0]);
       }
@@ -76,12 +87,15 @@ export default function PodcastsScreen() {
   const selectPodcast = useCallback(async (podcast: MegaphonePodcast, forceRefresh = false) => {
     setSelectedPodcast(podcast);
     setEpisodes([]);
+    setEpisodesError(null);
     setLoadingEpisodes(true);
     try {
       const eps = await getEpisodes(podcast.id, 1, 20, forceRefresh);
       setEpisodes(eps);
     } catch (err: any) {
-      console.error('[Podcasts] Episodes load error:', err?.message);
+      const msg = err?.message ?? 'Unknown error';
+      console.error('[Podcasts] Episodes load error:', msg);
+      setEpisodesError(msg);
     } finally {
       setLoadingEpisodes(false);
     }
@@ -97,12 +111,11 @@ export default function PodcastsScreen() {
   }, [loadPodcasts, selectPodcast, selectedPodcast]);
 
   const openEpisode = useCallback((episode: MegaphoneEpisode) => {
-    if (!selectedPodcast) return;
     navigation.navigate('PodcastPlayer', {
       episodeId: episode.id,
       podcastId: episode.podcastId,
     });
-  }, [navigation, selectedPodcast]);
+  }, [navigation]);
 
   // ─── Render helpers ──────────────────────────────────────────────────────
 
@@ -209,18 +222,47 @@ export default function PodcastsScreen() {
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />
       }
+      keyboardShouldPersistTaps="handled"
     >
+      {/* Search bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search podcasts & episodes…"
+            placeholderTextColor={colors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.searchClear}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
       {/* Podcast row */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Holy Culture Podcasts</Text>
-        <FlatList
-          data={podcasts}
-          keyExtractor={p => p.id}
-          renderItem={renderPodcastCard}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.podcastRow}
-        />
+        <Text style={styles.sectionTitle}>
+          {q ? `Podcasts matching "${searchQuery}"` : 'Holy Culture Podcasts'}
+        </Text>
+        {filteredPodcasts.length === 0 ? (
+          <Text style={styles.noResultsText}>No podcasts match your search.</Text>
+        ) : (
+          <FlatList
+            data={filteredPodcasts}
+            keyExtractor={p => p.id}
+            renderItem={renderPodcastCard}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.podcastRow}
+          />
+        )}
       </View>
 
       {/* Episode list for selected podcast */}
@@ -237,12 +279,23 @@ export default function PodcastsScreen() {
 
           {loadingEpisodes ? (
             <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: spacing.lg }} />
-          ) : episodes.length === 0 ? (
+          ) : episodesError ? (
             <View style={styles.emptyEpisodes}>
-              <Text style={styles.emptyText}>No episodes found for this podcast.</Text>
+              <Text style={styles.emptyText}>Could not load episodes.</Text>
+              <TouchableOpacity style={styles.retrySmallBtn} onPress={() => selectPodcast(selectedPodcast, true)}>
+                <Text style={styles.retrySmallBtnText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : filteredEpisodes.length === 0 ? (
+            <View style={styles.emptyEpisodes}>
+              <Text style={styles.emptyText}>
+                {q && episodes.length > 0
+                  ? `No episodes match "${searchQuery}".`
+                  : 'No episodes found for this podcast.'}
+              </Text>
             </View>
           ) : (
-            episodes.map(ep => (
+            filteredEpisodes.map(ep => (
               <View key={ep.id}>{renderEpisode({ item: ep })}</View>
             ))
           )}
@@ -279,6 +332,36 @@ const createStyles = (colors: ReturnType<typeof import('../hooks/useColors').use
     },
     retryBtnText: { ...typography.button, color: '#fff' },
 
+    // Search
+    searchContainer: {
+      paddingHorizontal: spacing.screenPadding,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.sm,
+    },
+    searchBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.backgroundSecondary,
+      borderRadius: spacing.round,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: spacing.md,
+      height: 44,
+    },
+    searchIcon: { fontSize: 16, marginRight: spacing.sm },
+    searchInput: {
+      flex: 1,
+      ...typography.body,
+      color: colors.textPrimary,
+      paddingVertical: 0,
+    },
+    searchClear: { fontSize: 14, color: colors.textMuted, paddingLeft: spacing.sm },
+    noResultsText: {
+      ...typography.body,
+      color: colors.textSecondary,
+      paddingHorizontal: spacing.screenPadding,
+    },
+
     section: { marginBottom: spacing.lg },
     sectionTitle: {
       ...typography.h4,
@@ -289,10 +372,7 @@ const createStyles = (colors: ReturnType<typeof import('../hooks/useColors').use
 
     // Podcast cards
     podcastRow: { paddingHorizontal: spacing.screenPadding, gap: spacing.md },
-    podcastCard: {
-      width: PODCAST_CARD_SIZE,
-      marginRight: spacing.md,
-    },
+    podcastCard: { width: PODCAST_CARD_SIZE, marginRight: spacing.md },
     podcastCardSelected: {},
     podcastImage: {
       width: PODCAST_CARD_SIZE,
@@ -301,22 +381,11 @@ const createStyles = (colors: ReturnType<typeof import('../hooks/useColors').use
       backgroundColor: colors.backgroundSecondary,
       marginBottom: spacing.sm,
     },
-    podcastImagePlaceholder: {
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
+    podcastImagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
     podcastImagePlaceholderText: { fontSize: 40 },
-    podcastTitle: {
-      ...typography.bodySmall,
-      color: colors.textSecondary,
-      fontWeight: '600',
-    },
+    podcastTitle: { ...typography.bodySmall, color: colors.textSecondary, fontWeight: '600' },
     podcastTitleSelected: { color: colors.primary },
-    podcastEpisodeCount: {
-      ...typography.caption,
-      color: colors.textMuted,
-      marginTop: 2,
-    },
+    podcastEpisodeCount: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
     selectedIndicator: {
       height: 3,
       backgroundColor: colors.primary,
@@ -350,17 +419,9 @@ const createStyles = (colors: ReturnType<typeof import('../hooks/useColors').use
       borderRadius: 8,
       backgroundColor: colors.background,
     },
-    episodeArtPlaceholder: {
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
+    episodeArtPlaceholder: { alignItems: 'center', justifyContent: 'center' },
     episodeInfo: { flex: 1, marginHorizontal: spacing.md },
-    episodeNumber: {
-      ...typography.caption,
-      color: colors.primary,
-      fontWeight: '700',
-      marginBottom: 2,
-    },
+    episodeNumber: { ...typography.caption, color: colors.primary, fontWeight: '700', marginBottom: 2 },
     episodeTitle: { ...typography.body, color: colors.textPrimary, fontWeight: '600', marginBottom: 4 },
     episodeSummary: { ...typography.caption, color: colors.textSecondary, lineHeight: 16, marginBottom: 4 },
     episodeMeta: { flexDirection: 'row', alignItems: 'center' },
@@ -376,5 +437,12 @@ const createStyles = (colors: ReturnType<typeof import('../hooks/useColors').use
     },
     playBtnIcon: { color: '#fff', fontSize: 13, marginLeft: 2 },
     emptyEpisodes: { padding: spacing.xl, alignItems: 'center' },
-    emptyText: { ...typography.body, color: colors.textSecondary, textAlign: 'center' },
+    emptyText: { ...typography.body, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.md },
+    retrySmallBtn: {
+      backgroundColor: colors.primary,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      borderRadius: spacing.round,
+    },
+    retrySmallBtnText: { ...typography.button, color: '#fff' },
   });
