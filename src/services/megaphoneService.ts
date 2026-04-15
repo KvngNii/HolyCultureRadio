@@ -19,8 +19,8 @@ import {
 } from '../config';
 
 const AUTH_HEADER = `Token token=${MEGAPHONE_API_TOKEN}`;
-const PODCASTS_CACHE_KEY = '@hcr_mg_podcasts';
-const EPISODES_CACHE_PREFIX = '@hcr_mg_episodes_';
+const PODCASTS_CACHE_KEY = '@hcr_mg_podcasts_v2';
+const EPISODES_CACHE_PREFIX = '@hcr_mg_episodes_v2_';
 const PODCASTS_TTL = 60 * 60 * 1000;      // 1 hour
 const EPISODES_TTL = 30 * 60 * 1000;      // 30 minutes
 
@@ -204,7 +204,7 @@ export async function getEpisode(
  */
 export async function clearMegaphoneCache(): Promise<void> {
   const keys = await AsyncStorage.getAllKeys();
-  const megaphoneKeys = keys.filter(k => k.startsWith('@hcr_mg_'));
+  const megaphoneKeys = keys.filter(k => k.startsWith('@hcr_mg'));
   if (megaphoneKeys.length) await AsyncStorage.multiRemove(megaphoneKeys);
 }
 
