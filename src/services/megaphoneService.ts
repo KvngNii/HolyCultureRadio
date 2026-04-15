@@ -68,6 +68,22 @@ async function apiFetch<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// ─── HTML stripping ───────────────────────────────────────────────────────────
+
+function stripHtml(html: string): string {
+  if (!html) return '';
+  return html
+    .replace(/<[^>]+>/g, '')   // remove tags
+    .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // ─── Field mappers (API returns snake_case) ───────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -76,8 +92,8 @@ function mapPodcast(p: any): MegaphonePodcast {
     id:                  p.id       ?? p.uid       ?? '',
     title:               p.title                   ?? '',
     slug:                p.slug                    ?? '',
-    summary:             p.summary                 ?? '',
-    description:         p.description ?? p.summary ?? '',
+    summary:             stripHtml(p.summary       ?? ''),
+    description:         stripHtml(p.description ?? p.summary ?? ''),
     imageUrl:            p.image_url  ?? p.imageUrl  ?? '',
     backgroundImageUrl:  p.background_image_url ?? p.backgroundImageUrl ?? null,
     episodeCount:        p.episode_count ?? p.episodeCount ?? 0,
@@ -95,8 +111,8 @@ function mapEpisode(e: any, podcastId: string): MegaphoneEpisode {
     id:            e.id          ?? e.uid         ?? '',
     podcastId:     e.podcast_id  ?? e.podcastId   ?? podcastId,
     title:         e.title                        ?? '',
-    summary:       e.summary                      ?? '',
-    notes:         e.body        ?? e.notes       ?? '',
+    summary:       stripHtml(e.summary            ?? ''),
+    notes:         stripHtml(e.body ?? e.notes    ?? ''),
     pubDate:       e.pub_date    ?? e.pubDate      ?? '',
     duration:      Number(e.duration              ?? 0),
     audioUrl:      e.audio_url   ?? e.audioUrl    ?? '',
@@ -152,7 +168,7 @@ export async function getEpisodes(
 
   const episodes = raw
     .map(e => mapEpisode(e, podcastId))
-    .filter(e => e.status === 'published' && !e.draft && e.audioUrl);
+    .filter(e => e.audioUrl); // API already gates by auth token; just need a playable URL
 
   await writeCache(cacheKey, episodes);
   return episodes;
