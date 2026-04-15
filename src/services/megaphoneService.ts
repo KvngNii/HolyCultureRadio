@@ -54,6 +54,8 @@ async function writeCache<T>(key: string, data: T): Promise<void> {
 
 async function apiFetch<T>(path: string): Promise<T> {
   const url = `${MEGAPHONE_API_BASE}${path}`;
+  if (__DEV__) console.log('[Megaphone] GET', url);
+
   const res = await fetch(url, {
     headers: {
       Authorization: AUTH_HEADER,
@@ -61,11 +63,16 @@ async function apiFetch<T>(path: string): Promise<T> {
     },
   });
 
+  if (__DEV__) console.log('[Megaphone] status', res.status);
+
   if (!res.ok) {
     throw new Error(`Megaphone API error ${res.status}: ${res.statusText}`);
   }
 
-  return res.json() as Promise<T>;
+  const text = await res.text();
+  if (__DEV__) console.log('[Megaphone] response (first 500 chars):', text.slice(0, 500));
+
+  return JSON.parse(text) as T;
 }
 
 // ─── Response normalizer ──────────────────────────────────────────────────────
