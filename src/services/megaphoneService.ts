@@ -117,11 +117,11 @@ function mapPodcast(p: any): MegaphonePodcast {
     slug:                p.slug                    ?? '',
     summary:             stripHtml(p.summary       ?? ''),
     description:         stripHtml(p.description ?? p.summary ?? ''),
-    imageUrl:            p.image_url  ?? p.imageUrl  ?? '',
-    backgroundImageUrl:  p.background_image_url ?? p.backgroundImageUrl ?? null,
-    episodeCount:        p.episode_count ?? p.episodeCount ?? 0,
-    feedUrl:             p.feed_url  ?? p.feedUrl  ?? '',
-    websiteUrl:          p.website_url ?? p.websiteUrl ?? '',
+    imageUrl:            p.imageFile ?? p.image_file ?? p.image_url ?? p.imageUrl ?? '',
+    backgroundImageUrl:  p.backgroundImageFile ?? p.background_image_url ?? p.backgroundImageUrl ?? null,
+    episodeCount:        p.episodeCount ?? p.episode_count ?? 0,
+    feedUrl:             p.feedUrl  ?? p.feed_url  ?? '',
+    websiteUrl:          p.websiteUrl ?? p.website_url ?? '',
     language:            p.language ?? 'en',
     createdAt:           p.created_at ?? p.createdAt ?? '',
     updatedAt:           p.updated_at ?? p.updatedAt ?? '',
@@ -136,14 +136,19 @@ function mapEpisode(e: any, podcastId: string): MegaphoneEpisode {
     title:         e.title                        ?? '',
     summary:       stripHtml(e.summary            ?? ''),
     notes:         stripHtml(e.body ?? e.notes    ?? ''),
-    pubDate:       e.pub_date    ?? e.pubDate      ?? '',
+    // API returns lowercase 'pubdate', not pub_date or pubDate
+    pubDate:       e.pubdate     ?? e.pub_date    ?? e.pubDate     ?? '',
     duration:      Number(e.duration              ?? 0),
-    audioUrl:      e.audio_url   ?? e.audioUrl    ?? '',
-    imageUrl:      e.image_url   ?? e.imageUrl    ?? '',
+    // API returns 'audioFile', not audio_url or audioUrl
+    audioUrl:      e.audioFile   ?? e.audio_file  ?? e.audio_url   ?? e.audioUrl ?? e.enclosureUrl ?? e.enclosure_url ?? '',
+    // API returns 'imageFile', not image_url or imageUrl
+    imageUrl:      e.imageFile   ?? e.image_file  ?? e.image_url   ?? e.imageUrl  ?? '',
     explicit:      Boolean(e.explicit),
-    episodeType:   e.episode_type ?? e.episodeType ?? 'full',
-    season:        e.season      ?? null,
-    episodeNumber: e.episode_number ?? e.episodeNumber ?? null,
+    episodeType:   e.episodeType ?? e.episode_type ?? 'full',
+    // API returns 'seasonNumber', not season
+    season:        e.seasonNumber ?? e.season_number ?? e.season   ?? null,
+    // API returns 'episodeNumber' (camelCase already)
+    episodeNumber: e.episodeNumber ?? e.episode_number             ?? null,
     status:        e.status                       ?? '',
     draft:         Boolean(e.draft),
   };
