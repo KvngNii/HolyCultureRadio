@@ -69,7 +69,7 @@ class AuthService {
 
       // Listen for auth state changes
       supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('Auth state changed:', event);
+        if (__DEV__) console.log('Auth state changed:', event);
 
         this.session = session;
 
