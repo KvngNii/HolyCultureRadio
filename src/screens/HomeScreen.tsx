@@ -53,7 +53,7 @@ export default function HomeScreen() {
             <Text style={styles.liveText}>LIVE NOW</Text>
           </View>
           <Text style={styles.heroTitle}>Holy Culture Radio</Text>
-          <Text style={styles.heroSubtitle}>SiriusXM Channel 154</Text>
+          <Text style={styles.heroSubtitle}>Live Christian Hip-Hop · Gospel · R&B</Text>
           <View style={styles.heroButton}>
             <Text style={styles.heroButtonText}>Listen Live</Text>
           </View>

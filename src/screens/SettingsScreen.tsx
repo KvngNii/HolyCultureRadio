@@ -275,16 +275,16 @@ export default function SettingsScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.settingItem}
-          onPress={() => showComingSoon('SiriusXM integration')}
+          onPress={() => showComingSoon('radio.net integration')}
         >
           <View style={styles.settingInfo}>
             <Text style={styles.settingIcon}>📻</Text>
             <View>
-              <Text style={styles.settingLabel}>SiriusXM</Text>
-              <Text style={styles.settingDescription}>Not connected</Text>
+              <Text style={styles.settingLabel}>Live Radio</Text>
+              <Text style={styles.settingDescription}>Holy Culture Radio stream</Text>
             </View>
           </View>
-          <Text style={styles.connectText}>Connect</Text>
+          <Text style={styles.connectText}>Info</Text>
         </TouchableOpacity>
       </View>
 
